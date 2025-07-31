@@ -7,7 +7,7 @@ from langchain_aws import ChatBedrockConverse
 import boto3
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
-from typing import List, Dict, Any, TypedDict, Annotated, Tuple
+from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from prompts import (
     architect_agent_prompts,
     dev_env_init_prompts, 
@@ -101,32 +101,118 @@ architect_agent = create_custom_react_agent(
 )
 
 async def define_req(state: InputState) -> DefineReqState:
-    """Define requirements."""
+    """Processes the initial user input to define project requirements.
+
+    This node invokes a language model chain (`req_def_chain`) to analyze the
+    initial messages and extract a list of functional or non-functional
+    requirements for the project.
+
+    Args:
+        state (InputState): The initial state containing the 'messages' from the user.
+
+    Returns:
+        DefineReqState: An updated state dictionary containing the response from
+            the LLM chain under 'messages' and the extracted 'requirements' as a
+            list of strings.
+    """
     result = await req_def_chain.ainvoke({'messages': state['messages']})
     return {"messages": [result], "requirements": [result.content]}
 
 async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
-    """Initialize development environment."""
+    """Determines the technical stack for the development environment.
+
+    Based on the defined requirements, this node invokes a language model chain
+    (`dev_env_init_chain`) to decide on the programming language, frameworks,
+    and libraries needed for the project.
+
+    Args:
+        state (DefineReqState): The state containing the project 'requirements'.
+
+    Returns:
+        DevEnvInitState: An updated state dictionary with the LLM response under
+            'messages', and the determined 'language', 'framework', and 'library'.
+            Note: The return statement is currently commented out.
+    """
     result = await dev_env_init_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "language": [result.content], "framework": [result.content], "library": [result.content]}
 
 async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
-    """Plan development."""
+    """Creates a high-level development plan with main goals and sub-goals.
+
+    This node uses the context of the technical stack to invoke the
+    `dev_planning_chain`, which breaks down the project into a series of
+    main goals and a dictionary of corresponding sub-goals.
+
+    Args:
+        state (DevEnvInitState): The state containing the chosen 'language',
+            'framework', and 'library'.
+
+    Returns:
+        DevPlanningState: An updated state dictionary with the LLM response under
+            'messages', along with the 'main_goals' and 'sub_goals' for the project.
+            Note: The return statement is currently commented out.
+    """
     result = await dev_planning_chain.ainvoke({'messages': state['messages']})    
     # return {"messages": [result], "main_goals": [result.content], "sub_goals": [result.content]}
 
 async def architect(state: DevPlanningState) -> ArchitectState:
-    """Architect."""
+    """Acts as the software architect to refine the main goals.
+
+    This node invokes the `architect_agent_chain` to review and potentially
+    refine the main goals of the project based on architectural best practices.
+
+    Args:
+        state (DevPlanningState): The state containing the 'main_goals' and
+            'sub_goals' from the planning phase.
+
+    Returns:
+        ArchitectState: An updated state dictionary with the architect's
+            response message and potentially refined 'main_goals'.
+            Note: The return statement is currently commented out.
+    """
     result = await architect_agent_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "main_goals": [result.content]}
 
 async def role_allocate(state: ArchitectState) -> RoleAllocateState:
-    """Role allocate."""
+    """Allocates sub-goals to different developer roles or agents.
+
+    This node uses the `role_allocate_chain` to process the sub-goals and
+    decide which software engineer agent is responsible for each task.
+
+    Args:
+        state (ArchitectState): The state containing the refined 'main_goals'
+            from the architect.
+
+    Returns:
+        RoleAllocateState: An updated state dictionary with the allocation
+            decision message and the `sub_goals` mapped to specific roles.
+            Note: The return statement is currently commented out.
+    """
     result = await role_allocate_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "sub_goals": [result.content]}
 
 def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
-    """Based on role allocate decision spawn engineer agents."""
+    """Dynamically routes tasks to engineer agents based on allocation.
+
+    This function acts as a conditional edge. It inspects the 'decision' key in
+    the state, which is expected to contain the output from the 'role_allocate'
+    node. Based on this decision, it determines which engineer agent(s) to
+    spawn by creating a list of `Send` objects for the next step.
+
+    If no specific agents are required, it can route to a default node like a
+    resolver or synthesizer.
+
+    Args:
+        state (RoleAllocateState): The current state from the 'role_allocate' node.
+        config (RunnableConfig): The configuration for the runnable, containing
+            session-specific details.
+
+    Returns:
+        Union[Send, List[Send]]: A list of `Send` objects, each targeting a
+            specific agent node with its assigned tasks. Can also return a single
+            `Send` object to route to a fallback node.
+            Note: The implementation is currently commented out.
+    """
     decisions = []
     # for agent_key, agent_info in state["decision"].items():
     #     if isinstance(agent_info, dict):
@@ -137,18 +223,46 @@ def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
     #                 "target": agent_key,
     #                 "messages": [agent_info.get("query")]
     #             })
-
+    #
     # if len(decisions) == 0:
     #     return Send("synthesizer", {"messages": [state["direct_response"]], "agent_state": []})
-
+    #
     # return [Send(s["target"], {"messages": s["messages"], "intermediate_steps":[]}) for s in decisions]
 
 async def spawn_engineers(state: RoleAllocateState) -> EngineerState:
-    """spawn engineers."""
+    """A placeholder node for the software engineer agents' work.
+
+    In a complete implementation, this node would likely be replaced by a
+    dynamic dispatcher or multiple individual engineer agent nodes. It is
+    invoked after role allocation to carry out the development tasks.
+
+    Args:
+        state (RoleAllocateState): The state containing allocated sub-goals.
+
+    Returns:
+        EngineerState: An updated state dictionary containing the results of the
+            engineering work under the 'jobs' key.
+            Note: The implementation is currently commented out.
+    """
     # result = await se_agent_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "jobs": [result.content]}
 
 async def resolver(state: ResolverState) -> OutputState:
+    """Aggregates results from all agents and synthesizes a final response.
+
+    This node collects the outputs from all preceding agent nodes, which are
+    stored in 'agent_state'. It then invokes the `resolver_chain` to process
+    these intermediate results and generate a final, coherent response.
+
+    Args:
+        state (ResolverState): The state containing the 'agent_state' list, which
+            holds the outputs from all executed agents.
+
+    Returns:
+        OutputState: The final output state of the graph, containing the
+            synthesized 'response'.
+            Note: The return statement is currently commented out.
+    """
     agent_results = {}
     for agent_name, agent_result in state["agent_state"]:
         last_message = agent_result["messages"][-1]
@@ -158,7 +272,26 @@ async def resolver(state: ResolverState) -> OutputState:
     # return {"messages": [result], "response": [result.content]}
 
 async def agent_node(state: Dict[str, Any], agent: CompiledStateGraph, name:str, config: RunnableConfig):
-    logger.info(f"agent_node {name} invoked::: ")
+    """Dynamically invokes a sub-agent graph and formats its output.
+
+    This function serves as a generic node to execute a compiled LangGraph agent.
+    It passes the current state to the agent, invokes it with a specific
+    configuration, and then wraps the agent's output in a dictionary structured
+    to be merged into the main graph's 'agent_state'.
+
+    Args:
+        state (Dict[str, Any]): The current state dictionary of the main graph,
+            which is passed as input to the sub-agent.
+        agent (CompiledStateGraph): The pre-compiled LangGraph sub-agent to execute.
+        name (str): The name of the agent, used for logging and to identify its
+            output in the 'agent_state'.
+        config (RunnableConfig): The configuration object for the agent invocation,
+            which may contain session-specific information.
+
+    Returns:
+        Dict[str, Any]: A dictionary with the key 'agent_state', containing a list
+            with a single tuple: (agent_name, agent_result).
+    """
     result = await agent.ainvoke(
         state, 
         config={
