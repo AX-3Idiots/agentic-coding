@@ -1,0 +1,16 @@
+[project]
+name = "agentic-coding"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "boto3>=1.39.17",
+    "docker>=7.1.0",
+    "fastapi>=0.116.1",
+    "langchain>=0.3.27",
+    "langchain-aws>=0.2.29",
+    "langgraph>=0.6.2",
+    "pydantic>=2.11.7",
+    "uvicorn>=0.35.0",
+]
