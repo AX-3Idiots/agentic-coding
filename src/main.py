@@ -1,14 +1,13 @@
 from fastapi import FastAPI
-import logging
 from logging_config import setup_logging
 from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
+from callbacks import logging_callback_handler
 
 setup_logging()
 load_dotenv()
-logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="agentic-coding",
@@ -21,9 +20,10 @@ class Request:
 
 @app.post("/invoke-workflow")
 async def read_root(request: Request):
-    response = await graph.ainvoke({
-        "messages": [
-            HumanMessage(content=request.input)
-        ]
-    })
+    response = await graph.ainvoke(
+            {"messages": [HumanMessage(content=request.input)]},
+            config={                
+                "callbacks": [logging_callback_handler]
+            },
+    )
     return response
