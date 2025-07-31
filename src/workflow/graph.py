@@ -22,12 +22,9 @@ from dotenv import load_dotenv
 import operator
 from constants import AWSModel
 import functools
-import logging
 from agents import create_custom_react_agent
 
 load_dotenv()
-
-logger = logging.getLogger(__name__)
 
 class InputState(TypedDict):
     """Input state for the AI CM graph."""
