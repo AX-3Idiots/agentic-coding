@@ -15,7 +15,7 @@ uv sync
 To run the FastAPI development server, use the following command:
 
 ```bash
-uv uvicorn src.main:app --reload
+uv run uvicorn src.main:app --reload
 ```
 
 ## Packages

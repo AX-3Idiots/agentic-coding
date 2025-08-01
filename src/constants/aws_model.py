@@ -45,6 +45,9 @@ class AWSModel(str, Enum):
     COHERE_COMMAND_LIGHT_CROSS_REGION = "us.cohere.command-light-text-v14-cross-region"
     STABILITY_STABLE_DIFFUSION_CROSS_REGION = "us.stability.stable-diffusion-xl-v1-cross-region"
     STABILITY_STABLE_DIFFUSION_LITE_CROSS_REGION = "us.stability.stable-diffusion-xl-lite-v1-cross-region"
+    ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+
+
 
     @classmethod
     def get_text_models(cls):
@@ -78,7 +81,8 @@ class AWSModel(str, Enum):
             cls.AMAZON_TITAN_LITE_CROSS_REGION,
             cls.COHERE_COMMAND_CROSS_REGION,
             cls.COHERE_COMMAND_LIGHT_CROSS_REGION,
-            cls.ANTHROPIC_CLAUDE_4_SONNET_CROSS_REGION
+            cls.ANTHROPIC_CLAUDE_4_SONNET_CROSS_REGION,
+            cls.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION
         ]
 
     @classmethod

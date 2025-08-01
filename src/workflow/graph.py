@@ -8,21 +8,21 @@ import boto3
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
-from prompts import (
-    architect_agent_prompts,
-    dev_env_init_prompts, 
-    dev_planning_prompts, 
-    req_def_prompts, 
-    role_allocate_prompts, 
-    se_agent_prompts, 
-    resolver_prompts
-)
+# from prompts import (
+    # architect_agent_prompts,
+    # dev_env_init_prompts, 
+    # dev_planning_prompts, 
+    # req_def_prompts, 
+    # role_allocate_prompts, 
+    # se_agent_prompts, 
+    # resolver_prompts
+# )
 import os
 from dotenv import load_dotenv
 import operator
-from constants import AWSModel
+from ..constants.aws_model import AWSModel
 import functools
-from agents import create_custom_react_agent
+from ..agents import create_custom_react_agent
 
 load_dotenv()
 
@@ -71,31 +71,42 @@ class ResolverState(TypedDict):
     """State for the resolver node."""
     messages: Annotated[List[AnyMessage], add_messages]
     agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
-    
+
+class OverallState(TypedDict):
+    """State for the overall graph."""
+    messages: Annotated[List[AnyMessage], add_messages]
+    requirements: list[str]
+    language: list[str]
+    framework: list[str]
+    library: list[str]
+    main_goals: list[str]
+    sub_goals: dict[str, list[str]]
+    agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
+    response: str
 
 bedrock_client = boto3.client("bedrock-runtime", region_name=os.environ["AWS_DEFAULT_REGION"])
 
 llm = ChatBedrockConverse(
-    model=AWSModel.ANTHROPIC_CLAUDE_4_SONNET_CROSS_REGION,
+    model=AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
     client=bedrock_client,
     temperature=0,
     max_tokens=None,
-    region_name="us-east-1",
+    region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
-req_def_chain = req_def_prompts | llm
-dev_env_init_chain = dev_env_init_prompts | llm
-dev_planning_chain = dev_planning_prompts | llm
-role_allocate_chain = role_allocate_prompts | llm
-architect_agent_chain = architect_agent_prompts | llm
-resolver_chain = resolver_prompts | llm
+# req_def_chain = req_def_prompts | llm
+# dev_env_init_chain = dev_env_init_prompts | llm
+# dev_planning_chain = dev_planning_prompts | llm
+# role_allocate_chain = role_allocate_prompts | llm
+# architect_agent_chain = architect_agent_prompts | llm
+# resolver_chain = resolver_prompts | llm
 
-architect_agent = create_custom_react_agent(
-    model=llm,
-    tools=[],
-    prompt=architect_agent_prompts,
-    name="architect_agent"
-)
+# architect_agent = create_custom_react_agent(
+#     model=llm,
+#     tools=[],
+#     prompt=architect_agent_prompts,
+#     name="architect_agent"
+# )
 
 async def define_req(state: InputState) -> DefineReqState:
     """Processes the initial user input to define project requirements.
@@ -112,7 +123,9 @@ async def define_req(state: InputState) -> DefineReqState:
             the LLM chain under 'messages' and the extracted 'requirements' as a
             list of strings.
     """
-    result = await req_def_chain.ainvoke({'messages': state['messages']})
+    # result = await req_def_chain.ainvoke({'messages': state['messages']})
+    result = llm.invoke(state['messages'])
+    print(result)
     return {"messages": [result], "requirements": [result.content]}
 
 async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
@@ -130,7 +143,7 @@ async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
             'messages', and the determined 'language', 'framework', and 'library'.
             Note: The return statement is currently commented out.
     """
-    result = await dev_env_init_chain.ainvoke({'messages': state['messages']})
+    # result = await dev_env_init_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "language": [result.content], "framework": [result.content], "library": [result.content]}
 
 async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
@@ -149,7 +162,7 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
             'messages', along with the 'main_goals' and 'sub_goals' for the project.
             Note: The return statement is currently commented out.
     """
-    result = await dev_planning_chain.ainvoke({'messages': state['messages']})    
+    # result = await dev_planning_chain.ainvoke({'messages': state['messages']})    
     # return {"messages": [result], "main_goals": [result.content], "sub_goals": [result.content]}
 
 async def architect(state: DevPlanningState) -> ArchitectState:
@@ -167,7 +180,7 @@ async def architect(state: DevPlanningState) -> ArchitectState:
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
-    result = await architect_agent_chain.ainvoke({'messages': state['messages']})
+    # result = await architect_agent_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "main_goals": [result.content]}
 
 async def role_allocate(state: ArchitectState) -> RoleAllocateState:
@@ -185,7 +198,7 @@ async def role_allocate(state: ArchitectState) -> RoleAllocateState:
             decision message and the `sub_goals` mapped to specific roles.
             Note: The return statement is currently commented out.
     """
-    result = await role_allocate_chain.ainvoke({'messages': state['messages']})
+    # result = await role_allocate_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "sub_goals": [result.content]}
 
 def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
@@ -265,7 +278,7 @@ async def resolver(state: ResolverState) -> OutputState:
         last_message = agent_result["messages"][-1]
         agent_results[agent_name] = last_message.content
     
-    result = await resolver_chain.ainvoke({'messages': state['messages']})
+    # result = await resolver_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "response": [result.content]}
 
 async def agent_node(state: Dict[str, Any], agent: CompiledStateGraph, name:str, config: RunnableConfig):
@@ -302,15 +315,16 @@ async def agent_node(state: Dict[str, Any], agent: CompiledStateGraph, name:str,
         "agent_state": [(name, result)]
     }
 
-architect_agent_node = functools.partial(agent_node, agent=architect_agent, name="architect")
+# architect_agent_node = functools.partial(agent_node, agent=architect_agent, name="architect")
 
-graph_builder = StateGraph(input=InputState, output=OutputState)
+graph_builder = StateGraph(input=InputState, output=OutputState, state_schema=OverallState)
 graph_builder.add_node("define_req", define_req)
 graph_builder.add_node("dev_env_init", dev_env_init)
 graph_builder.add_node("dev_planning", dev_planning)
 graph_builder.add_node("architect", architect)
 graph_builder.add_node("role_allocate", role_allocate)
 graph_builder.add_node("spawn_engineers", spawn_engineers)
+graph_builder.add_node("resolver", resolver)
 
 graph_builder.add_edge(START, "define_req")
 graph_builder.add_edge("define_req", END)
