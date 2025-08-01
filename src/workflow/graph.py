@@ -153,10 +153,10 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
     # return {"messages": [result], "main_goals": [result.content], "sub_goals": [result.content]}
 
 async def architect(state: DevPlanningState) -> ArchitectState:
-    """Acts as the software architect to refine the main goals.
+    """Acts as the software architect to implement the main goals.
 
     This node invokes the `architect_agent_chain` to review and potentially
-    refine the main goals of the project based on architectural best practices.
+    implement the main goals of the project based on architectural best practices.
 
     Args:
         state (DevPlanningState): The state containing the 'main_goals' and
