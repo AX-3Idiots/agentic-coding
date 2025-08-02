@@ -183,7 +183,7 @@ async def architect(state: DevPlanningState) -> ArchitectState:
     # result = await architect_agent_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "main_goals": [result.content]}
 
-async def role_allocate(state: ArchitectState) -> RoleAllocateState:
+async def role_allocate(state: DevPlanningState) -> RoleAllocateState:
     """Allocates sub-goals to different developer roles or agents.
 
     This node uses the `role_allocate_chain` to process the sub-goals and
@@ -224,20 +224,7 @@ def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
             Note: The implementation is currently commented out.
     """
     decisions = []
-    # for agent_key, agent_info in state["decision"].items():
-    #     if isinstance(agent_info, dict):
-    #         if isinstance(agent_info.get("should_invoke"), str):
-    #             agent_info["should_invoke"] = agent_info["should_invoke"].lower() == "true"
-    #         if agent_info.get("should_invoke", False) and agent_info.get("query", "") != "":
-    #             decisions.append({
-    #                 "target": agent_key,
-    #                 "messages": [agent_info.get("query")]
-    #             })
-    #
-    # if len(decisions) == 0:
-    #     return Send("synthesizer", {"messages": [state["direct_response"]], "agent_state": []})
-    #
-    # return [Send(s["target"], {"messages": s["messages"], "intermediate_steps":[]}) for s in decisions]
+    return 
 
 async def spawn_engineers(state: RoleAllocateState) -> EngineerState:
     """A placeholder node for the software engineer agents' work.
