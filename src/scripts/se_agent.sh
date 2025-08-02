@@ -20,3 +20,7 @@ rm "$error_log" # Clean up the temporary file on success
 
 code=$(echo "$result" | jq -r '.code')
 cost=$(echo "$result" | jq -r '.cost_usd')
+
+# At the end of the script, output the final result as a single JSON line
+# so it can be captured by the container logs.
+echo "$result" | jq -c '{code: .code, cost_usd: .cost_usd}'

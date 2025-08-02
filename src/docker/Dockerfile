@@ -1,7 +1,7 @@
 FROM node:18-slim
 RUN apt-get update && apt-get install -y git
 RUN npm install -g @anthropic-ai/claude-code
-# Create the .claude directory and the settings.json file
+# Create the .claude directory and the settings.json file for claude-codepermission
 RUN mkdir -p /root/.claude && \
     echo '{ \
       "permissions": { \
