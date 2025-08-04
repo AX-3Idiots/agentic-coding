@@ -8,15 +8,15 @@ import boto3
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
-# from prompts import (
+from ..prompts import (
     # architect_agent_prompts,
     # dev_env_init_prompts, 
     # dev_planning_prompts, 
     # req_def_prompts, 
-    # role_allocate_prompts, 
+    allocate_role_v1,
     # se_agent_prompts, 
     # resolver_prompts
-# )
+)
 import os
 from dotenv import load_dotenv
 import operator
@@ -97,7 +97,7 @@ llm = ChatBedrockConverse(
 # req_def_chain = req_def_prompts | llm
 # dev_env_init_chain = dev_env_init_prompts | llm
 # dev_planning_chain = dev_planning_prompts | llm
-# role_allocate_chain = role_allocate_prompts | llm
+role_allocate_chain = allocate_role_v1.prompt | llm
 # architect_agent_chain = architect_agent_prompts | llm
 # resolver_chain = resolver_prompts | llm
 
@@ -198,7 +198,12 @@ async def role_allocate(state: DevPlanningState) -> RoleAllocateState:
             decision message and the `sub_goals` mapped to specific roles.
             Note: The return statement is currently commented out.
     """
-    # result = await role_allocate_chain.ainvoke({'messages': state['messages']})
+    sub_goals = state.get("sub_goals", None)
+
+    if sub_goals is None:
+        return
+
+    result = await role_allocate_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "sub_goals": [result.content]}
 
 def allocate_decision(state: RoleAllocateState, config: RunnableConfig):

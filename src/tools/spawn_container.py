@@ -45,7 +45,9 @@ def spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
                 "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
                 "SYSTEM_PROMPT": se_agent_prompts_v1.prompt.template,
                 "USER_INPUT": job,
-                "TIME_OUT": TIME_OUT
+                "TIME_OUT": TIME_OUT,
+                "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
+                "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
             },
         )
         container_ids.append(container.id)
@@ -76,7 +78,7 @@ def is_container_running(container_ids: list[str]) -> bool:
 
 def get_container_results(container_ids: list[str]) -> list[dict]:
     """
-    Get the logs of the exited containers, parse the results, and remove them.
+    Get the logs of the exited containers and parse the results.
 
     Args:
         container_ids (list[str]): A list of exited container IDs.
@@ -140,6 +142,8 @@ def remove_containers(container_ids: list[str]) -> None:
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
-            container.remove()
+            container.remove(force=True)
         except NotFound:
             continue
+def spawn_engineers():
+    pass

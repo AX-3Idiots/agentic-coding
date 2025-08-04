@@ -3,18 +3,7 @@ from datetime import datetime
 from langchain_core.prompts import ChatPromptTemplate
 
 class SEAgentPrompts(BasePrompt):
-    def __init__(
-        self,
-        creator: str,
-        date_created: datetime,
-        description: str,
-        prompt: ChatPromptTemplate,
-        ):
-        super().__init__()
-        self.creator = creator
-        self.date_created = date_created
-        self.description = description
-        self.prompt = prompt
+    pass
 
 se_agent_prompts_v1 = SEAgentPrompts(
     creator="Dexter",
