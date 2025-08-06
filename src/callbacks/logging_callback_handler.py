@@ -7,6 +7,8 @@ class LoggingCallbackHandler(BaseCallbackHandler):
     def __init__(self, logger: logging.Logger, session_id: str):
         self.logger = logger
         self.session_id = session_id
+        # run_inline 속성 추가 - 콜백을 인라인으로 실행할지 결정
+        self.run_inline = True
 
     def on_llm_end(self, response: LLMResult, **kwargs):
         self.logger.info(f"LLM response: {response.generations[0][0].text}")

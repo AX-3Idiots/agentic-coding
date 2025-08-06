@@ -5,10 +5,15 @@ from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
-from .callbacks import logging_callback_handler
+from .callbacks.logging_callback_handler import LoggingCallbackHandler
+import logging
 
 setup_logging()
 load_dotenv()
+
+# LoggingCallbackHandler 인스턴스 생성
+logger = logging.getLogger(__name__)
+callback_handler = LoggingCallbackHandler(logger, "default_session")
 
 app = FastAPI(
     title="agentic-coding",
@@ -24,7 +29,7 @@ async def read_root(request: Request):
     response = await graph.ainvoke(
             {"messages": [HumanMessage(content=request.input)]},
             config={                
-                "callbacks": [logging_callback_handler]
+                "callbacks": [callback_handler]
             },
     )
     return {"response": response}

@@ -12,7 +12,7 @@ from ..prompts import (
     # architect_agent_prompts,
     # dev_env_init_prompts, 
     # dev_planning_prompts, 
-    # req_def_prompts, 
+    req_def_prompts, 
     allocate_role_v1,
     # se_agent_prompts, 
     # resolver_prompts
@@ -23,6 +23,7 @@ import operator
 from ..constants.aws_model import AWSModel
 import functools
 from ..agents import create_custom_react_agent
+import re
 
 load_dotenv()
 
@@ -37,7 +38,12 @@ class OutputState(TypedDict):
 class DefineReqState(TypedDict):
     """State for the define req node."""
     messages: Annotated[List[AnyMessage], add_messages]
-    requirements: list[str]
+    requirements: List[str]
+    user_scenarios: List[str]
+    processes: List[str]
+    domain_entities: List[str]
+    non_functional_reqs: List[str]
+    exclusions: List[str]
 
 class DevEnvInitState(TypedDict):
     """State for the dev env init node."""
@@ -94,7 +100,7 @@ llm = ChatBedrockConverse(
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
-# req_def_chain = req_def_prompts | llm
+req_def_chain = req_def_prompts.prompt | llm
 # dev_env_init_chain = dev_env_init_prompts | llm
 # dev_planning_chain = dev_planning_prompts | llm
 role_allocate_chain = allocate_role_v1.prompt | llm
@@ -107,6 +113,22 @@ role_allocate_chain = allocate_role_v1.prompt | llm
 #     prompt=architect_agent_prompts,
 #     name="architect_agent"
 # )
+
+def parse_section(text: str, section_name: str) -> List[str]:
+    """
+    Extracts a list of items under a given section name like:
+    ## Functional Requirements
+    - ...
+    - ...
+    """
+    pattern = rf"## {section_name}\n(.+?)(?=\n## |\Z)"
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return []
+    
+    section = match.group(1).strip()
+    lines = [line.strip("-• ").strip() for line in section.splitlines() if line.strip()]
+    return lines
 
 async def define_req(state: InputState) -> DefineReqState:
     """Processes the initial user input to define project requirements.
@@ -123,10 +145,18 @@ async def define_req(state: InputState) -> DefineReqState:
             the LLM chain under 'messages' and the extracted 'requirements' as a
             list of strings.
     """
-    # result = await req_def_chain.ainvoke({'messages': state['messages']})
-    result = llm.invoke(state['messages'])
-    print(result)
-    return {"messages": [result], "requirements": [result.content]}
+    result = await req_def_chain.ainvoke({'messages': state['messages']})
+    print("define_req result:", result.content)
+
+    return {
+        "messages": [result],
+        "requirements": parse_section(result.content, "Functional Requirements"),
+        "user_scenarios": parse_section(result.content, "User Scenarios"),
+        "processes": parse_section(result.content, "Process Flow"),
+        "domain_entities": parse_section(result.content, "Domain Entities"),
+        "non_functional_reqs": parse_section(result.content, "Non-functional Requirements"),
+        "exclusions": parse_section(result.content, "Not in Scope")
+    }
 
 async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
     """Determines the technical stack for the development environment.
