@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from ..prompts import (
     # architect_agent_prompts,
-    # dev_env_init_prompts, 
+    dev_env_init_prompts, 
     # dev_planning_prompts, 
     req_def_prompts, 
     allocate_role_v1,
@@ -101,7 +101,7 @@ llm = ChatBedrockConverse(
 )
 
 req_def_chain = req_def_prompts.prompt | llm
-# dev_env_init_chain = dev_env_init_prompts | llm
+dev_env_init_chain = dev_env_init_prompts.prompt | llm
 # dev_planning_chain = dev_planning_prompts | llm
 role_allocate_chain = allocate_role_v1.prompt | llm
 # architect_agent_chain = architect_agent_prompts | llm
@@ -173,8 +173,16 @@ async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
             'messages', and the determined 'language', 'framework', and 'library'.
             Note: The return statement is currently commented out.
     """
-    # result = await dev_env_init_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "language": [result.content], "framework": [result.content], "library": [result.content]}
+    result = await dev_env_init_chain.ainvoke({
+        "messages": state['messages'],
+        "requirements": state.get("requirements", []),
+        "user_scenarios": state.get("user_scenarios", []),
+        "processes": state.get("processes", []),
+        "domain_entities": state.get("domain_entities", []),
+        "non_functional_reqs": state.get("non_functional_reqs", []),
+        "exclusions": state.get("exclusions", [])
+    })
+    return {"messages": [result], "language": [result.content], "framework": [result.content], "library": [result.content]}
 
 async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
     """Creates a high-level development plan with main goals and sub-goals.
