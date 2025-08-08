@@ -20,8 +20,6 @@ class ResolverState(ToolState):
     # SA 에이전트로부터 전달받는 기준 브랜치
     base_branch: str
     project_dir: str
-    # 충돌 해결 시 컨텍스트로 사용될 전체 요구사항
-    requirement: str
 
     # --- 최종 결과 ---
     # 에이전트 작업 완료 후 생성될 구조화된 결과
@@ -111,7 +109,7 @@ def _create_initial_prompt(state: ResolverState) -> dict:
     LLM에게 전달할 첫 번째 임무 지시 메시지를 생성합니다.
     """
     base_branch = state['base_branch']
-    requirement = state['requirement']
+    project_dir = state['project_dir']
 
     # f-string을 사용해 명확한 초기 임무를 전달합니다.
     task_description = f"""
@@ -121,10 +119,11 @@ def _create_initial_prompt(state: ResolverState) -> dict:
     <base_branch_to_merge_into>
     {base_branch}
     </base_branch_to_merge_into>
-    <overall_requirement_context>
-    {requirement}
-    </overall_requirement_context>
+    <repository_path>
+    {project_dir}
+    </repository_path>
     </task_info>
+
 
     Start by identifying the branches that need to be merged into the base branch.
     """

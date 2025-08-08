@@ -13,7 +13,6 @@ resolver_prompt_template = ChatPromptTemplate([
 
     <context>
     - 이전 단계에서 `base_branch`가 주어집니다. 이것은 모든 다른 브랜치가 병합되어야 하는 브랜치입니다.
-    - 논리적 충돌을 해결할 때의 맥락을 위해 전체 작업에 대한 원래 `requirement`도 제공됩니다.
     - 또한 모든 작업을 수행해야 하는 로컬 Git 저장소의 경로인 **`repo_path`**가 주어집니다.
     </context>
 
@@ -38,7 +37,6 @@ resolver_prompt_template = ChatPromptTemplate([
 
     <initial_state>
     - `base_branch`: "feature/payment-gateway-scaffold"
-    - `requirement`: "다양한 결제 수단을 갖춘 완전한 결제 게이트웨이를 구현합니다."
     - `project_dir`: "./temp-workspace"
     - `messages`: [HumanMessage(content="당신의 작업은 충돌을 해결하고 브랜치를 통합하는 것입니다...")]
     </initial_state>
@@ -137,8 +135,7 @@ Exit Code: 0
   "tool": "CodeConflictResolverTool",
   "tool_input": {{
     "file_path": "src/main/java/com/payment/PaymentService.java",
-    "conflict_content": "... (이전 관찰에서 얻은 전체 내용) ...",
-    "requirement": "다양한 결제 수단을 갖춘 완전한 결제 게이트웨이를 구현합니다."
+    "conflict_content": "... (이전 관찰에서 얻은 전체 내용) ..."
   }}
 }}
 ```
@@ -155,6 +152,21 @@ Exit Code: 0
 </action>
 </example_thought_process>
 ---
+<final_cleanup>
+    <thought>
+    모든 브랜치 통합 및 커밋이 완료되었습니다. 작업한 폴더는 삭제하겠습니다.
+    </thought>
+    <action>
+    ```json
+    {{
+      "tool": "ExecuteShellCommandTool",
+      "tool_input": {{
+        "command": "rm -rf ./<project_name>"
+      }}
+    }}
+    ```
+    </action>
+</final_cleanup>
 
 <start_signal>시작!</start_signal>
 """

@@ -16,8 +16,8 @@ class ArchitectAgentResult(BaseModel):
         description="생성된 프로젝트 폴더 경로입니다."
     )
 class ResolverAgentResult(BaseModel):
-    """코드 충돌 해결 에이전트 작업의 최종 결과물인 코드 블럭을 담는 모델입니다."""
+    """코드 커밋 이후 최종 브랜치 정보를 담는 모델입니다."""
 
-    final_code: Optional[str] = Field(
-        description="충돌이 해결된 코드 블럭입니다."
+    final_url: Optional[str] = Field(
+        description="최종 브랜치의 전체 URL입니다."
     )

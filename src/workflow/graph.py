@@ -65,6 +65,7 @@ class ArchitectState(TypedDict):
     branch_name: str
     base_url: str
     branch_url: str
+    project_dir: str
 
 class RoleAllocateState(TypedDict):
     """State for the role allocate node."""
@@ -91,6 +92,7 @@ class OverallState(TypedDict):
     main_goals: list[str]
     sub_goals: dict[str, list[str]]
     branch_name: str
+    project_dir: str
     base_url: str
     branch_url: str
     agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
@@ -332,44 +334,12 @@ async def resolver(state: ArchitectState) -> OutputState:
             synthesized 'response'.
             Note: The return statement is currently commented out.
     """
-    main_goals = [
-    "이메일과 비밀번호를 이용한 간단한 회원가입 및 로그인 기능을 제공하는 FastAPI 기반 API 서버를 구축한다."
-    ]
-    sub_goals = {
-        "회원가입 기능 구현": [
-            "`/register` 엔드포인트를 POST 방식으로 구현한다.",
-            "사용자로부터 이메일과 비밀번호를 입력받는다.",
-            "비밀번호는 bcrypt를 사용해 해시 처리한 뒤 저장한다.",
-            "이메일 중복 여부를 확인하고 중복 시 에러를 반환한다."
-        ],
-        "로그인 기능 구현": [
-            "`/login` 엔드포인트를 POST 방식으로 구현한다.",
-            "입력된 이메일과 비밀번호를 검증한다.",
-            "로그인 성공 시 JWT 토큰을 발급하여 응답한다.",
-            "실패 시 적절한 에러 메시지를 반환한다."
-        ],
-        "JWT 기반 인증 처리": [
-            "`/me`와 같은 보호된 엔드포인트를 생성한다.",
-            "요청 헤더의 Authorization Bearer 토큰을 검증한다.",
-            "토큰이 유효한 경우 사용자 정보를 반환한다."
-        ],
-        "간단한 데이터 저장 방식": [
-            "사용자 정보는 메모리 또는 JSON 파일에 임시 저장한다.",
-            "개발용이므로 DB는 사용하지 않는다.",
-            "`User` 모델은 `email`, `hashed_password` 필드를 가진다."
-        ],
-        "환경 설정 및 실행": [
-            "`requirements.txt`에 필요한 패키지 (fastapi, uvicorn, bcrypt, pyjwt)를 명시한다.",
-            "`main.py` 하나의 파일에서 전체 API를 구현한다.",
-            "Uvicorn을 사용해 로컬에서 서버를 실행할 수 있도록 설정한다."
-        ]
-    }
-    requirement = f"Main Goal: {main_goals}\nSub Goal: {sub_goals}"
-    result = await create_resolver_agent.ainvoke(
+
+    print(1)
+    result = await resolver_agent.ainvoke(
         {
             'project_dir': state['project_dir'],
-            'base_branch': state['branch_name'],
-            'requirement': requirement
+            'base_branch': state['branch_name']
         },
         config={"recursion_limit": 100}
     )
@@ -439,8 +409,8 @@ graph_builder.add_edge("dev_env_init", "dev_planning")
 graph_builder.add_edge("dev_planning", "architect")
 graph_builder.add_edge("architect", "role_allocate")
 graph_builder.add_edge("role_allocate", "spawn_engineers")
-graph_builder.add_edge("spawn_engineers", END)
-# graph_builder.add_edge("resolver", END)
+graph_builder.add_edge("spawn_engineers", "resolver")
+graph_builder.add_edge("resolver", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"
