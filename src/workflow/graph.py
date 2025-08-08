@@ -202,47 +202,15 @@ async def architect(state: DevPlanningState) -> ArchitectState:
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
-    main_goals = [
-    "이메일과 비밀번호를 이용한 간단한 회원가입 및 로그인 기능을 제공하는 FastAPI 기반 API 서버를 구축한다."
-    ]
-    sub_goals = {
-        "회원가입 기능 구현": [
-            "`/register` 엔드포인트를 POST 방식으로 구현한다.",
-            "사용자로부터 이메일과 비밀번호를 입력받는다.",
-            "비밀번호는 bcrypt를 사용해 해시 처리한 뒤 저장한다.",
-            "이메일 중복 여부를 확인하고 중복 시 에러를 반환한다."
-        ],
-        "로그인 기능 구현": [
-            "`/login` 엔드포인트를 POST 방식으로 구현한다.",
-            "입력된 이메일과 비밀번호를 검증한다.",
-            "로그인 성공 시 JWT 토큰을 발급하여 응답한다.",
-            "실패 시 적절한 에러 메시지를 반환한다."
-        ],
-        "JWT 기반 인증 처리": [
-            "`/me`와 같은 보호된 엔드포인트를 생성한다.",
-            "요청 헤더의 Authorization Bearer 토큰을 검증한다.",
-            "토큰이 유효한 경우 사용자 정보를 반환한다."
-        ],
-        "간단한 데이터 저장 방식": [
-            "사용자 정보는 메모리 또는 JSON 파일에 임시 저장한다.",
-            "개발용이므로 DB는 사용하지 않는다.",
-            "`User` 모델은 `email`, `hashed_password` 필드를 가진다."
-        ],
-        "환경 설정 및 실행": [
-            "`requirements.txt`에 필요한 패키지 (fastapi, uvicorn, bcrypt, pyjwt)를 명시한다.",
-            "`main.py` 하나의 파일에서 전체 API를 구현한다.",
-            "Uvicorn을 사용해 로컬에서 서버를 실행할 수 있도록 설정한다."
-        ]
-    }
 
     result = await architect_agent.ainvoke(
         {
-            'main_goals': main_goals,
-            'sub_goals': sub_goals
+            'main_goals': state['main_goals'],
+            'sub_goals': state['sub_goals']
         },
         config={"recursion_limit": 100}
     )
-    print(result['architect_result'])
+
     return {
         "messages": result['messages'],
         "project_dir": result['architect_result'].project_dir,
@@ -335,7 +303,6 @@ async def resolver(state: ArchitectState) -> OutputState:
             Note: The return statement is currently commented out.
     """
 
-    print(1)
     result = await resolver_agent.ainvoke(
         {
             'project_dir': state['project_dir'],
@@ -343,14 +310,13 @@ async def resolver(state: ArchitectState) -> OutputState:
         },
         config={"recursion_limit": 100}
     )
-    print(result)
     # agent_results = {}
     # for agent_name, agent_result in state["agent_state"]:
     #     last_message = agent_result["messages"][-1]
     #     agent_results[agent_name] = last_message.content
 
     # result = await resolver_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "response": [result.content]}
+    return {"messages": result['messages'], "response": result['resolver_result']}
 
 async def agent_node(state: Dict[str, Any], agent: CompiledStateGraph, name:str, config: RunnableConfig):
     """Dynamically invokes a sub-agent graph and formats its output.

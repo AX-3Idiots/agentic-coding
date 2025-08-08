@@ -2,14 +2,14 @@
 
 import asyncio
 from typing import Sequence, List, Dict, Optional
-
+import re
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
-
+import json
 from ..models.schemas import ResolverAgentResult # Pydantic 모델 (별도 파일에 정의 가정)
 from ..prebuilt import ToolState # LangGraph의 기본 상태 (별도 파일에 정의 가정)
 
@@ -53,9 +53,18 @@ def create_resolver_agent(
       # 이 노드는 현재 ReAct 프롬프트에서 'finish' 액션으로 대체되므로,
       # 필요 시 별도의 요약 프롬프트를 구성하여 사용할 수 있습니다.
       # 현재는 마지막 메시지를 결과로 간주하는 간단한 로직을 구현합니다.
-      last_message = state['messages'][-1].content
+      content = state['messages'][-1].content
+      json_pattern = r'\{[^{}]*"final_url"[^{}]*\}'
+      json_match = re.search(json_pattern, content, re.DOTALL)
+
+      if json_match:
+          json_str = json_match.group(0)
+          last_message = json.loads(json_str)
+          final_url = last_message.get('final_url')
+      else:
+          final_url = None
       final_result = ResolverAgentResult(
-          final_code=last_message
+          final_url=final_url
       )
       return {"resolver_result": final_result}
 
@@ -67,8 +76,8 @@ def create_resolver_agent(
         decision = tools_condition(state)
         if decision == "tools":
               return "tools"
-        # 도구를 더 이상 호출하지 않으면, 그래프를 종료합니다.
-        return END
+
+        return "answer_generator"
 
 
     # 상태 그래프 빌더를 초기화합니다.
@@ -79,7 +88,7 @@ def create_resolver_agent(
     graph_builder.add_node("agent", agent)
     tool_node = ToolNode(tools=tools)
     graph_builder.add_node("tools", tool_node)
-    # graph_builder.add_node("answer_generator", answer_generator) # 필요 시 활성화
+    graph_builder.add_node("answer_generator", answer_generator) # 필요 시 활성화
 
     # 그래프의 흐름(엣지)을 정의합니다.
     graph_builder.add_edge(START, "initial_prompt")
@@ -94,7 +103,7 @@ def create_resolver_agent(
 
     # 'tools' 노드 실행 후에는 다시 'agent' 노드로 돌아가 다음 행동을 결정합니다.
     graph_builder.add_edge("tools", "agent")
-    # graph_builder.add_edge("answer_generator", END) # 필요 시 활성화
+    graph_builder.add_edge("answer_generator", END) # 필요 시 활성화
 
     # 그래프를 컴파일하여 실행 가능한 객체로 만듭니다.
     graph = graph_builder.compile()
