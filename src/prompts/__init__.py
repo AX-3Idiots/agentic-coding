@@ -10,7 +10,7 @@ from .resolver_prompts import *
 
 __all__ = [
     "dev_env_init_prompts", 
-    "dev_planning_prompts", 
+    "dev_planning_prompts_v1", 
     "req_def_prompts", 
     "role_allocate_prompts", 
     "architect_agent_prompts", 

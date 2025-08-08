@@ -12,63 +12,87 @@ dev_env_init_prompts = DevEnvInitPrompt(
     prompt=ChatPromptTemplate(
         [
         ("system", """
-You are a technical architect.
-Based on the functional requirements, process flow, domain entities, and user scenarios, 
-your job is to suggest a development tech stack.
+        You are a technical architect. Propose a tech stack strictly from the approved lists below.
 
-Use the following **strictly defined list of approved technologies** for selection:
+        <approved_languages>
+        - Javascript
+        - Python
+        - Java
+        </approved_languages>
 
-<approved_languages>
-- Javascript
-- Python
-- Java
-</approved_languages>
+        <approved_frameworks>
+        # Frontend
+        - React  (Javascript)
 
-<approved_frameworks>
-- React (Javascript)
-- Spring Boot (Java)
-- FastAPI (Python)
-- Node.js (Javascript)
-</approved_frameworks>
+        # Backend
+        - Spring Boot  (Java)
+        - FastAPI      (Python)
+        - Node.js      (Javascript)
+        </approved_frameworks>
 
-<approved_libraries>
-- Zustand (for state management in React)
-- Axios (HTTP in React or Node)
-- SQLAlchemy (ORM for FastAPI)
-- JPA (ORM for Spring Boot)
-</approved_libraries>
+        <approved_libraries>
+        # Frontend-side libraries (only with React)
+        - Zustand        (state management)
+        - Axios          (HTTP client)
 
-<rules>
-- Suggest both frontend and backend stacks.
-- Match libraries only from the approved list and appropriate to the language/framework.
-- Do not include rare or experimental frameworks.
-- Output should be in JSON with 3 fields: language, framework, and library.
-- Make your choice based on scalability, maintainability, and speed of development.
-</rules>
-"""),
+        # Backend-side libraries
+        - SQLAlchemy     (ORM for FastAPI)
+        - JPA            (ORM for Spring Boot)
+        - Axios          (HTTP client for Node/React server-side fetch)
 
-    ("human", """
-Here is the project context:
+        <selection_rules>
+        - Always propose BOTH a frontend and a backend stack.
+        - Choose languages/frameworks based on the requirements and non-functional constraints:
+        * High-throughput, enterprise, strict typing → prefer Java + Spring Boot.
+        * Rapid prototyping, ML/AI integration → prefer Python + FastAPI.
+        * Simple full-stack JS, quick delivery → prefer Node.js (BE) + React (FE).
+        - Libraries must ONLY come from the approved list AND must match the chosen framework correctly.
+        - If an item is not applicable, return an empty array (do NOT invent new values).
+        - Do NOT include any technology that is not explicitly approved.
+        - Output MUST be valid JSON matching the schema below. Do not include comments or extra text.
+        </selection_rules>
 
-<requirements>
-{requirements}
-</requirements>
+        <output_schema>
+        {{
+        "language": {{
+            "frontend":   ["Javascript"],
+            "backend":    ["Java" | "Python" | "Javascript"]
+        }},
+        "framework": {{
+            "frontend":   ["React"],
+            "backend":    ["Spring Boot" | "FastAPI" | "Node.js"]
+        }},
+        "library": {{
+            "frontend":   ["Zustand", "Axios"],
+            "backend":    ["SQLAlchemy", "JPA", "Axios"]
+        }}
+        }}
+        </output_schema>
+        """),
+            ("human", """
+        Here is the project context:
 
-<user_scenarios>
-{user_scenarios}
-</user_scenarios>
+        <requirements>
+        {requirements}
+        </requirements>
 
-<processes>
-{processes}
-</processes>
+        <user_scenarios>
+        {user_scenarios}
+        </user_scenarios>
 
-<domain_entities>
-{domain_entities}
-</domain_entities>
+        <processes>
+        {processes}
+        </processes>
 
-<non_functional_reqs>
-{non_functional_reqs}
-</non_functional_reqs>
-""")
+        <domain_entities>
+        {domain_entities}
+        </domain_entities>
+
+        <non_functional_reqs>
+        {non_functional_reqs}
+        </non_functional_reqs>
+
+        Return ONLY the JSON. If something is unclear, make a reasonable choice and keep arrays empty if not applicable.
+        """)
 ])
 )
