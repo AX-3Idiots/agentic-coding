@@ -12,7 +12,9 @@ class ArchitectAgentResult(BaseModel):
     branch_url: str = Field(
         description="해당 브랜치의 전체 URL입니다."
     )
-
+    project_dir: str = Field(
+        description="생성된 프로젝트 폴더 경로입니다."
+    )
 class ResolverAgentResult(BaseModel):
     """코드 충돌 해결 에이전트 작업의 최종 결과물인 코드 블럭을 담는 모델입니다."""
 

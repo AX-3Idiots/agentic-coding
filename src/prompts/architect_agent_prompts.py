@@ -62,8 +62,8 @@ architect_prompt_template = ChatPromptTemplate([
     * **명령어:** `cd temp-workspace && git add . && git commit -m "feat: Initial scaffold for <project-name>" && git push -u origin <project-name>`
 
 5.  **정리 (Cleanup):**
-    * 작업이 완료되었으므로, 로컬에 생성했던 임시 작업 폴더를 안전하게 삭제합니다.
-    * **명령어:** `rm -rf temp-workspace`
+    * 작업이 완료되었으므로, 로컬에 생성했던 임시 작업 폴더를  <project-name>폴더로 복사하고, 임시 폴더는 삭제하세요.
+    * **명령어:** `cp -r temp-workspace <project-name> && rm -rf temp-workspace`
 </instructions>
 
 <tools>
@@ -75,6 +75,7 @@ architect_prompt_template = ChatPromptTemplate([
 모든 지시사항을 성공적으로 완료했다면, 다른 설명 없이 **반드시 아래 형식에 맞는 JSON 객체만**을 출력해야 합니다. `branchUrl`은 사용자가 결과를 바로 확인할 수 있도록 생성된 브랜치의 전체 URL을 포함해야 합니다.
 
 {{
+  "project_dir" : "생성된 <project-name> 폴더 경로"
   "branch_name": "<project-name>",
   "base_url": "<$TARGET_REPO_URL 환경 변수의 값>",
   "branch_url": "<$TARGET_REPO_URL를 기반으로 생성된 브랜치의 전체 URL>",

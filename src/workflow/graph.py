@@ -240,9 +240,10 @@ async def architect(state: DevPlanningState) -> ArchitectState:
         },
         config={"recursion_limit": 100}
     )
-
+    print(result['architect_result'])
     return {
         "messages": result['messages'],
+        "project_dir": result['architect_result'].project_dir,
         "branch_name": result['architect_result'].main_branch,
         "base_url": result['architect_result'].base_url,
         "branch_url": result['architect_result'].branch_url
@@ -366,6 +367,7 @@ async def resolver(state: ArchitectState) -> OutputState:
     requirement = f"Main Goal: {main_goals}\nSub Goal: {sub_goals}"
     result = await create_resolver_agent.ainvoke(
         {
+            'project_dir': state['project_dir'],
             'base_branch': state['branch_name'],
             'requirement': requirement
         },

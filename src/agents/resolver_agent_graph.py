@@ -19,6 +19,7 @@ class ResolverState(ToolState):
     # --- 입력 데이터 ---
     # SA 에이전트로부터 전달받는 기준 브랜치
     base_branch: str
+    project_dir: str
     # 충돌 해결 시 컨텍스트로 사용될 전체 요구사항
     requirement: str
 

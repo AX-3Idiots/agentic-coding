@@ -42,6 +42,7 @@ def create_architect_agent(
       last_message = json.loads(state['messages'][-1].content)
 
       final_result = ArchitectAgentResult(
+          project_dir=last_message.get('project_dir'),
           main_branch=last_message.get('branch_name'),
           base_url=last_message.get('base_url'),
           branch_url=last_message.get('branch_url')
