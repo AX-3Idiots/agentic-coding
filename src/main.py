@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
-from .callbacks import logging_callback_handler
+from .callbacks.logging_callback_handler import LoggingCallbackHandler
+from .core.config import git_config
+import os
 
 setup_logging()
 load_dotenv()
@@ -13,7 +15,8 @@ load_dotenv()
 app = FastAPI(
     title="agentic-coding",
     description="Agentic Coding",
-    default_response_class=JSONResponse
+    default_response_class=JSONResponse,
+    lifespan=git_config
 )
 
 class Request(BaseModel):
@@ -23,8 +26,8 @@ class Request(BaseModel):
 async def read_root(request: Request):
     response = await graph.ainvoke(
             {"messages": [HumanMessage(content=request.input)]},
-            config={                
-                "callbacks": [logging_callback_handler]
+            config={
+                "callbacks": [LoggingCallbackHandler]
             },
     )
     return {"response": response}
