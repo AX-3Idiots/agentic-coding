@@ -8,8 +8,8 @@ from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.tools import BaseTool
 
 def create_custom_react_agent(
-        model: BaseChatModel, 
-        tools: Sequence[BaseTool], 
+        model: BaseChatModel,
+        tools: Sequence[BaseTool],
         prompt: BasePromptTemplate,
         name: str = "agent"
     ) -> StateGraph:
@@ -24,7 +24,7 @@ def create_custom_react_agent(
         """Confluence agent."""
         result = await asyncio.to_thread(agent_chain.invoke, state)
         return {"messages": [result], "intermediate_steps": [result.content]}
-    
+
     graph_builder = StateGraph(ToolState)
     graph_builder.add_node("agent", agent)
 
