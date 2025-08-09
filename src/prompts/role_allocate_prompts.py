@@ -46,44 +46,15 @@ Each group will be assigned to a single agent or a coordinated team of agents to
 </grouping_logic>
 
 <output_format>
-Present the final output as a JSON object. The root object should be a list of user story groups.
-
-Example:
-
-```json
-{
-  "user_story_groups": [
-    {
-      "group_name": "User Authentication",
-      "user_stories": [
-        {
-          "story": "As a new user, I want to be able to sign up with my email and password so that I can create an account.",
-          "acceptance_criteria": [
-            "User can navigate to a sign-up page.",
-            "User can enter an email and password.",
-            "Password must be at least 8 characters long.",
-            "A confirmation email is sent to the user."
-          ]
-        },
-        {
-          "story": "As an existing user, I want to log in with my email and password so that I can access my account.",
-          "acceptance_criteria": [
-            "User can navigate to a login page.",
-            "User can enter a valid email and password to log in.",
-            "User sees an error message for invalid credentials."
-          ]
-        }
-      ]
-    },
-    {
-      "group_name": "Profile Management",
-      "user_stories": [
-        // ... more user stories
-      ]
-    }
-  ]
-}
-```
+Return ONLY valid JSON with the following shape:
+- Root key: "user_story_groups" (array)
+- Each item: {{
+  - "group_name": string
+  - "user_stories": array of {{
+    - "story": string (As a ..., I want ..., so that ...)
+    - "acceptance_criteria": array of strings
+  }}
+}}
 </output_format>
 </instructions>"""),
         ("human", "Here are the sub-goals: {sub_goals}"),

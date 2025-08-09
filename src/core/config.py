@@ -11,7 +11,7 @@ async def git_config(app: FastAPI):
     print("Application starting! Loading GitHub configuration.")
     github_token = get_github_app_token()
     os.environ["GH_APP_TOKEN"] = github_token
-    os.environ["TARGET_REPO_URL"] = os.environ.get("GIT_URL")
+    os.environ["TARGET_REPO_URL"] = os.environ.get("GIT_URL") or "https://github.com/saehoon0501/agentic-coding-testing.git"
 
     yield
 

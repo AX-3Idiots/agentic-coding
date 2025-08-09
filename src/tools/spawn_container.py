@@ -7,8 +7,13 @@ from ..prompts.se_agent_prompts import se_agent_prompts_v1
 import json
 import uuid
 import time
+from ..logging_config import setup_logging
+import logging
 
 load_dotenv()
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 TIME_OUT = "600"
 
@@ -27,14 +32,14 @@ except ImageNotFound:
     image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
     print(f"Image built successfully::: {build_logs}")
 
-def _spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
+def _spawn_containers(git_url:str, jobs: list[dict]) -> list[str]:
     """
     Spawn a container for each job.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
-        jobs (list[str]): A list of jobs to spawn.
+        jobs (list[dict]): A list of jobs to spawn.
 
     Returns:
         list[str]: A list of container IDs.
@@ -56,7 +61,7 @@ def _spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
                 "CLAUDE_CODE_USE_BEDROCK": "1",
                 "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION.value,
                 "SYSTEM_PROMPT": se_agent_prompts_v1.prompt.messages[0].prompt.template.strip(),
-                "USER_INPUT": job,
+                "USER_INPUT": json.dumps(job),
                 "TIME_OUT": TIME_OUT,
                 "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
                 "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
@@ -180,14 +185,14 @@ def _remove_containers(container_ids: list[str]) -> None:
             # This can happen if the container was already removed
             continue
 
-def spawn_engineers(git_url: str, jobs: list[str]) -> list[dict]:
+def spawn_engineers(git_url: str, jobs: list[dict]) -> list[dict]:
     """
     Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
-        jobs (list[str]): A list of jobs to spawn.
+        jobs (list[dict]): A list of jobs to spawn.
 
     Returns:
         list[dict]: A list of dictionaries, each containing code and cost.
@@ -201,7 +206,7 @@ def spawn_engineers(git_url: str, jobs: list[str]) -> list[dict]:
         results = _get_container_results(container_ids)
         return results
     except Exception as e:
-        print(f"An error occurred while spawning containers: {e}")
+        logger.error(f"An error occurred while spawning containers: {e}")
         return []
     finally:
         if container_ids:

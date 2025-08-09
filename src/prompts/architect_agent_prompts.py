@@ -80,7 +80,21 @@ architect_prompt_template = ChatPromptTemplate([
   "base_url": "<$TARGET_REPO_URL 환경 변수의 값>",
   "branch_url": "<$TARGET_REPO_URL를 기반으로 생성된 브랜치의 전체 URL>",
 }}
+```
 
+After all shell commands are complete, you MUST output the final answer using the `final_answer` tool in the following format. This is not optional.
+
+```json
+{{
+  "tool_name": "final_answer",
+  "tool_code": {{
+    "project_dir": "The path to the created <project-name> folder",
+    "branch_name": "The name of the new branch, e.g., <project-name>",
+    "base_url": "The value of the $TARGET_REPO_URL environment variable",
+    "branch_url": "The full URL to the newly created branch on GitHub"
+  }}
+}}
+```
 </output_format>
 
 이제 사용자의 새로운 프로젝트 계획을 분석하여, 아키텍트로서의 임무를 시작하세요.

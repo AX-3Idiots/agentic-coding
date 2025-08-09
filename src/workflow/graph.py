@@ -7,7 +7,7 @@ from langgraph.types import Send
 from langchain_aws import ChatBedrockConverse
 import boto3
 from botocore.config import Config
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from ..prompts import (
@@ -21,7 +21,7 @@ from ..prompts import (
 import os
 from dotenv import load_dotenv
 import operator
-
+from langchain_core.output_parsers import JsonOutputParser
 from ..tools.cli_tools import ExecuteShellCommandTool
 from ..tools.resolver_tools import CodeConflictResolverTool
 from ..constants.aws_model import AWSModel
@@ -85,7 +85,7 @@ def _dedup(seq: List[str]) -> List[str]:
 class InputState(TypedDict):
     """Input state for the AI CM graph."""
     messages: Annotated[List[AnyMessage], add_messages]
-    git_url: str
+    base_url: str
 
 class OutputState(TypedDict):
     """Output state for the AI CM graph."""
@@ -159,6 +159,7 @@ class OverallState(TypedDict):
     branch_url: str
     agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
     response: str
+    user_story_groups: list[dict[str, list[str] | str]]
 
 config = Config(
     read_timeout=900,
@@ -182,10 +183,8 @@ llm = ChatBedrockConverse(
 
 req_def_chain = req_def_prompts.prompt | llm
 dev_env_init_chain = dev_env_init_prompts.prompt | llm
-dev_planning_chain = dev_planning_prompts_v2.prompt | llm
-role_allocate_chain = allocate_role_v1.prompt | llm
-# architect_agent_chain = architect_agent_prompts | llm
-# resolver_chain = resolver_prompts | llm
+dev_planning_chain = dev_planning_prompts_v2.prompt | llm | JsonOutputParser()
+role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
 
 architect_agent = create_architect_agent(
     model=llm,
@@ -321,15 +320,10 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
     }
 
     result = await dev_planning_chain.ainvoke(payload)
-    raw = getattr(result, "content", result)
-
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        parsed = {"main_goals": [], "sub_goals": {}}
-
+    parsed = result
+    
     return {
-        "messages": [result],
+        "messages": [AIMessage(content=json.dumps(parsed))],
         "main_goals": parsed.get("main_goals", []),
         "sub_goals": parsed.get("sub_goals", {})
     }
@@ -388,7 +382,7 @@ async def role_allocate(state: RoleAllocateState) -> EngineerState:
         return
 
     result = await role_allocate_chain.ainvoke({
-        'messages': state['sub_goals'],
+        'sub_goals': state['sub_goals'],
         'requirements': state['requirements'],
         'user_scenarios': state['user_scenarios'],
         'processes': state['processes'],
@@ -396,39 +390,9 @@ async def role_allocate(state: RoleAllocateState) -> EngineerState:
         'non_functional_reqs': state['non_functional_reqs'],
         'exclusions': state['exclusions']
     })    
-    raw = getattr(result, "content", result)
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        parsed = {"user_story_groups": []}
-    return {"messages": [result], "user_story_groups": parsed.get("user_story_groups", [])}
+    return {"messages": [AIMessage(content=json.dumps(result))], "user_story_groups": result.get("user_story_groups", [])}
 
-def allocate_decision(state: EngineerState, config: RunnableConfig):
-    """Dynamically routes tasks to engineer agents based on allocation.
-
-    This function acts as a conditional edge. It inspects the 'decision' key in
-    the state, which is expected to contain the output from the 'role_allocate'
-    node. Based on this decision, it determines which engineer agent(s) to
-    spawn by creating a list of `Send` objects for the next step.
-
-    If no specific agents are required, it can route to a default node like a
-    resolver or synthesizer.
-
-    Args:
-        state (RoleAllocateState): The current state from the 'role_allocate' node.
-        config (RunnableConfig): The configuration for the runnable, containing
-            session-specific details.
-
-    Returns:
-        Union[Send, List[Send]]: A list of `Send` objects, each targeting a
-            specific agent node with its assigned tasks. Can also return a single
-            `Send` object to route to a fallback node.
-            Note: The implementation is currently commented out.
-    """
-    
-    return [Send("spawn_engineers", {"user_story_groups": user_story_group}) for user_story_group in state['user_story_groups']]
-
-async def spawn_engineers(state: EngineerState) -> ArchitectState:
+async def spawn_engineers(state: OverallState) -> ArchitectState:
     """A placeholder node for the software engineer agents' work.
 
     In a complete implementation, this node would likely be replaced by a
@@ -445,15 +409,23 @@ async def spawn_engineers(state: EngineerState) -> ArchitectState:
     """
     
     if not state['user_story_groups']:
-        return
-    user_story = state['user_story_groups'].get('user_stories', [])
-    if len(user_story) == 0:
-        return
+        return {}
+    user_story_groups = state['user_story_groups']
+    if len(user_story_groups) == 0:
+        return {}
 
-    return asyncio.to_thread(spawn_engineers_tool,
-        state['base_url'],
-        user_story
-    )
+    # Run container spawning in a background thread and wait for completion
+    try:
+        results = await asyncio.to_thread(
+            spawn_engineers_tool,
+            state['base_url'],
+            user_story_groups,
+        )
+    except Exception:
+        # Swallow errors here to avoid crashing the graph; downstream resolver can proceed
+        results = []
+
+    return {"agent_results": results}
 
 async def resolver(state: ArchitectState) -> OutputState:
     """Aggregates results from all agents and synthesizes a final response.
@@ -491,22 +463,19 @@ graph_builder = StateGraph(input=InputState, output=OutputState, state_schema=Ov
 graph_builder.add_node("define_req", define_req)
 graph_builder.add_node("dev_env_init", dev_env_init)
 graph_builder.add_node("dev_planning", dev_planning)
-graph_builder.add_node("architect", architect)
+# graph_builder.add_node("architect", architect)
 graph_builder.add_node("role_allocate", role_allocate)
 graph_builder.add_node("spawn_engineers", spawn_engineers)
 graph_builder.add_node("resolver", resolver)
 
 graph_builder.add_edge(START, "define_req")
 graph_builder.add_edge("define_req", END)
-graph_builder.add_conditional_edges(
-    "role_allocate",
-    allocate_decision,
-)
-
 graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
-graph_builder.add_edge("dev_planning", "architect")
-graph_builder.add_edge("architect", "role_allocate")
+graph_builder.add_edge("dev_planning", "role_allocate")
+# graph_builder.add_edge("dev_planning", "architect")
+# graph_builder.add_edge("architect", "role_allocate")
+graph_builder.add_edge("role_allocate", "spawn_engineers")
 graph_builder.add_edge("spawn_engineers", "resolver")
 graph_builder.add_edge("resolver", END)
 

@@ -38,14 +38,32 @@ def create_architect_agent(
         return {"messages": [result], "intermediate_steps": [result.content]}
 
     async def answer_generator(state: ArchitectState) -> ArchitectState:
-      """모든 중간 과정을 바탕으로 Pydantic 모델에 맞춰 최종 답변을 생성합니다."""
-      last_message = json.loads(state['messages'][-1].content)
+      """
+      Parses the final message from the agent to create a structured result.
+      If the message is not valid JSON, it returns a default result object
+      to prevent the graph from crashing.
+      """
+      try:
+          # Attempt to parse the JSON from the last message's content
+          last_message = json.loads(state['messages'][-1].content)
+          # Ensure last_message is a dictionary to prevent errors on .get()
+          if not isinstance(last_message, dict):
+              raise json.JSONDecodeError("Content is not a JSON object.", state['messages'][-1].content, 0)
+      except (json.JSONDecodeError, TypeError):
+          # If parsing fails, create a default object with error messages
+          # This makes the agent more robust to unexpected LLM outputs.
+          last_message = {
+              "project_dir": "Error: Could not parse final output.",
+              "branch_name": "Error: Could not parse final output.",
+              "base_url": "Error: Could not parse final output.",
+              "branch_url": "Error: Could not parse final output.",
+          }
 
       final_result = ArchitectAgentResult(
-          project_dir=last_message.get('project_dir'),
-          main_branch=last_message.get('branch_name'),
-          base_url=last_message.get('base_url'),
-          branch_url=last_message.get('branch_url')
+          project_dir=last_message.get('project_dir', 'Missing project_dir'),
+          main_branch=last_message.get('branch_name', 'Missing branch_name'),
+          base_url=last_message.get('base_url', 'Missing base_url'),
+          branch_url=last_message.get('branch_url', 'Missing branch_url')
       )
       return {"architect_result": final_result}
 

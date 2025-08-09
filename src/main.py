@@ -25,11 +25,14 @@ app = FastAPI(
 
 class Request(BaseModel):
     input: str
+    git_url: str
 
 @app.post("/invoke-workflow")
 async def read_root(request: Request):
     response = await graph.ainvoke(
-            {"messages": [HumanMessage(content=request.input)]},
+            {"messages": [HumanMessage(content=request.input)],
+            "base_url": request.git_url
+            },
             config={                
                 "callbacks": [callback_handler]
             },
