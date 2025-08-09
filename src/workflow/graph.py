@@ -15,9 +15,7 @@ from ..prompts import (
     dev_env_init_prompts,
     dev_planning_prompts_v2,
     req_def_prompts,
-    # role_allocate_prompts,
     allocate_role_v1,
-    # se_agent_prompts,
     resolver_prompts
 )
 import os
@@ -27,8 +25,7 @@ import operator
 from ..tools.cli_tools import ExecuteShellCommandTool
 from ..tools.resolver_tools import CodeConflictResolverTool
 from ..constants.aws_model import AWSModel
-import functools
-from ..agents import create_custom_react_agent
+from ..tools.spawn_container import spawn_engineers as spawn_engineers_tool
 from ..agents.resolver_agent_graph import create_resolver_agent
 from ..agents.architect_agent_graph import create_architect_agent
 import re
@@ -129,12 +126,18 @@ class ArchitectState(TypedDict):
 class RoleAllocateState(TypedDict):
     """State for the role allocate node."""
     messages: Annotated[List[AnyMessage], add_messages]
+    requirements: List[str]
+    user_scenarios: List[str]
+    processes: List[str]
+    domain_entities: List[str]
+    non_functional_reqs: List[str]
+    exclusions: List[str]
     sub_goals: dict[str, list[str]]
 
 class EngineerState(TypedDict):
     """State for the software engineer node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    jobs: dict[str, list[str]]
+    base_url: str
+    user_story_groups: list[dict[str, list[str] | str]]
 
 class ResolverState(TypedDict):
     """State for the resolver node."""
@@ -354,7 +357,7 @@ async def architect(state: DevPlanningState) -> ArchitectState:
     }
 
 
-async def role_allocate(state: DevPlanningState) -> RoleAllocateState:
+async def role_allocate(state: RoleAllocateState) -> EngineerState:
     """Allocates sub-goals to different developer roles or agents.
 
     This node uses the `role_allocate_chain` to process the sub-goals and
@@ -374,10 +377,23 @@ async def role_allocate(state: DevPlanningState) -> RoleAllocateState:
     if sub_goals is None:
         return
 
-    # result = await role_allocate_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "sub_goals": [result.content]}
+    result = await role_allocate_chain.ainvoke({
+        'messages': state['sub_goals'],
+        'requirements': state['requirements'],
+        'user_scenarios': state['user_scenarios'],
+        'processes': state['processes'],
+        'domain_entities': state['domain_entities'],
+        'non_functional_reqs': state['non_functional_reqs'],
+        'exclusions': state['exclusions']
+    })    
+    raw = getattr(result, "content", result)
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        parsed = {"user_story_groups": []}
+    return {"messages": [result], "user_story_groups": parsed.get("user_story_groups", [])}
 
-def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
+def allocate_decision(state: EngineerState, config: RunnableConfig):
     """Dynamically routes tasks to engineer agents based on allocation.
 
     This function acts as a conditional edge. It inspects the 'decision' key in
@@ -399,10 +415,10 @@ def allocate_decision(state: RoleAllocateState, config: RunnableConfig):
             `Send` object to route to a fallback node.
             Note: The implementation is currently commented out.
     """
-    decisions = []
-    return
+    
+    return [Send("spawn_engineers", {"user_story_groups": user_story_group}) for user_story_group in state['user_story_groups']]
 
-async def spawn_engineers(state: RoleAllocateState) -> EngineerState:
+async def spawn_engineers(state: EngineerState) -> ArchitectState:
     """A placeholder node for the software engineer agents' work.
 
     In a complete implementation, this node would likely be replaced by a
@@ -417,8 +433,17 @@ async def spawn_engineers(state: RoleAllocateState) -> EngineerState:
             engineering work under the 'jobs' key.
             Note: The implementation is currently commented out.
     """
-    # result = await se_agent_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "jobs": [result.content]}
+    
+    if not state['user_story_groups']:
+        return
+    user_story = state['user_story_groups'].get('user_stories', [])
+    if len(user_story) == 0:
+        return
+
+    return spawn_engineers_tool(
+        state['base_url'],
+        user_story
+    )
 
 async def resolver(state: ArchitectState) -> OutputState:
     """Aggregates results from all agents and synthesizes a final response.
@@ -452,42 +477,6 @@ async def resolver(state: ArchitectState) -> OutputState:
     # result = await resolver_chain.ainvoke({'messages': state['messages']})
     return {"messages": result['messages'], "response": result['resolver_result']}
 
-async def agent_node(state: Dict[str, Any], agent: CompiledStateGraph, name:str, config: RunnableConfig):
-    """Dynamically invokes a sub-agent graph and formats its output.
-
-    This function serves as a generic node to execute a compiled LangGraph agent.
-    It passes the current state to the agent, invokes it with a specific
-    configuration, and then wraps the agent's output in a dictionary structured
-    to be merged into the main graph's 'agent_state'.
-
-    Args:
-        state (Dict[str, Any]): The current state dictionary of the main graph,
-            which is passed as input to the sub-agent.
-        agent (CompiledStateGraph): The pre-compiled LangGraph sub-agent to execute.
-        name (str): The name of the agent, used for logging and to identify its
-            output in the 'agent_state'.
-        config (RunnableConfig): The configuration object for the agent invocation,
-            which may contain session-specific information.
-
-    Returns:
-        Dict[str, Any]: A dictionary with the key 'agent_state', containing a list
-            with a single tuple: (agent_name, agent_result).
-    """
-    result = await agent.ainvoke(
-        state,
-        config={
-            "recursion_limit": 16,
-            "configurable": {
-                "session_id": config["configurable"].get("session_id")
-            }
-        }
-    )
-    return {
-        "agent_state": [(name, result)]
-    }
-
-# architect_agent_node = functools.partial(agent_node, agent=architect_agent, name="architect")
-
 graph_builder = StateGraph(input=InputState, output=OutputState, state_schema=OverallState)
 graph_builder.add_node("define_req", define_req)
 graph_builder.add_node("dev_env_init", dev_env_init)
@@ -499,16 +488,15 @@ graph_builder.add_node("resolver", resolver)
 
 graph_builder.add_edge(START, "define_req")
 graph_builder.add_edge("define_req", END)
-# graph_builder.add_conditional_edges(
-#     "define_req",
-#     orchestrator_decision,
-# )
+graph_builder.add_conditional_edges(
+    "role_allocate",
+    allocate_decision,
+)
 
 graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
 graph_builder.add_edge("dev_planning", "architect")
 graph_builder.add_edge("architect", "role_allocate")
-graph_builder.add_edge("role_allocate", "spawn_engineers")
 graph_builder.add_edge("spawn_engineers", "resolver")
 graph_builder.add_edge("resolver", END)
 

@@ -7,7 +7,7 @@ from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
 from .callbacks.logging_callback_handler import LoggingCallbackHandler
 from .core.config import git_config
-import os
+import logging
 
 setup_logging()
 load_dotenv()
