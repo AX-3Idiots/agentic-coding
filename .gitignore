@@ -30,3 +30,4 @@ logs
 .cache
 .env
 test
+.DS_Store
