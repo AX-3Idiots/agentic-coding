@@ -1,18 +1,20 @@
 from __future__ import annotations
+import json
 
 from langgraph.graph import StateGraph, START, END, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Send
 from langchain_aws import ChatBedrockConverse
 import boto3
+from botocore.config import Config
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from ..prompts import (
     architect_agent_prompts,
-    # dev_env_init_prompts,
-    # dev_planning_prompts,
-    # req_def_prompts,
+    dev_env_init_prompts,
+    dev_planning_prompts_v2,
+    req_def_prompts,
     # role_allocate_prompts,
     allocate_role_v1,
     # se_agent_prompts,
@@ -27,9 +29,61 @@ from ..tools.resolver_tools import CodeConflictResolverTool
 from ..constants.aws_model import AWSModel
 import functools
 from ..agents import create_custom_react_agent
-from ..agents.architect_agent_graph import create_architect_agent
 from ..agents.resolver_agent_graph import create_resolver_agent
+from ..agents.architect_agent_graph import create_architect_agent
+import re
+
 load_dotenv()
+
+APPROVED = {
+    "language": {
+        "frontend": {"Javascript"},
+        "backend": {"Javascript", "Python", "Java"},
+    },
+    "framework": {
+        "frontend": {"React"},
+        "backend": {"Spring Boot", "FastAPI", "Node.js"},
+    },
+    "library": {
+        "frontend": {"Zustand", "Axios"},
+        "backend": {"SQLAlchemy", "JPA", "Axios"},
+    },
+}
+
+def parse_section(text: str, section_name: str) -> List[str]:
+    """
+    Extracts a list of items under a given section name like:
+    ## Functional Requirements
+    - ...
+    - ...
+    """
+    pattern = rf"## {section_name}\n(.+?)(?=\n## |\Z)"
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return []
+    
+    section = match.group(1).strip()
+    lines = [line.strip("-• ").strip() for line in section.splitlines() if line.strip()]
+    return lines
+
+def _ensure_list(x) -> List[str]:
+    if x is None:
+        return []
+    if isinstance(x, list):
+        return [str(v).strip() for v in x if str(v).strip()]
+    return [str(x).strip()]
+
+def _take_allowed(values: List[str], allowed: set) -> List[str]:
+    return [v for v in values if v in allowed]
+
+def _dedup(seq: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for v in seq:
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
 
 class InputState(TypedDict):
     """Input state for the AI CM graph."""
@@ -43,7 +97,12 @@ class OutputState(TypedDict):
 class DefineReqState(TypedDict):
     """State for the define req node."""
     messages: Annotated[List[AnyMessage], add_messages]
-    requirements: list[str]
+    requirements: List[str]
+    user_scenarios: List[str]
+    processes: List[str]
+    domain_entities: List[str]
+    non_functional_reqs: List[str]
+    exclusions: List[str]
 
 class DevEnvInitState(TypedDict):
     """State for the dev env init node."""
@@ -98,7 +157,6 @@ class OverallState(TypedDict):
     agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
     response: str
 
-
 bedrock_client = boto3.client("bedrock-runtime", region_name=os.environ["AWS_DEFAULT_REGION"])
 
 llm = ChatBedrockConverse(
@@ -109,9 +167,9 @@ llm = ChatBedrockConverse(
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
-# req_def_chain = req_def_prompts | llm
-# dev_env_init_chain = dev_env_init_prompts | llm
-# dev_planning_chain = dev_planning_prompts | llm
+req_def_chain = req_def_prompts.prompt | llm
+dev_env_init_chain = dev_env_init_prompts.prompt | llm
+dev_planning_chain = dev_planning_prompts_v2.prompt | llm
 role_allocate_chain = allocate_role_v1.prompt | llm
 # architect_agent_chain = architect_agent_prompts | llm
 # resolver_chain = resolver_prompts | llm
@@ -145,10 +203,17 @@ async def define_req(state: InputState) -> DefineReqState:
             the LLM chain under 'messages' and the extracted 'requirements' as a
             list of strings.
     """
-    # result = await req_def_chain.ainvoke({'messages': state['messages']})
-    result = llm.invoke(state['messages'])
-    print(result)
-    return {"messages": [result], "requirements": [result.content]}
+    result = await req_def_chain.ainvoke({'messages': state['messages']})
+
+    return {
+        "messages": [result],
+        "requirements": parse_section(result.content, "Functional Requirements"),
+        "user_scenarios": parse_section(result.content, "User Scenarios"),
+        "processes": parse_section(result.content, "Process Flow"),
+        "domain_entities": parse_section(result.content, "Domain Entities"),
+        "non_functional_reqs": parse_section(result.content, "Non-functional Requirements"),
+        "exclusions": parse_section(result.content, "Not in Scope")
+    }
 
 async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
     """Determines the technical stack for the development environment.
@@ -165,8 +230,54 @@ async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
             'messages', and the determined 'language', 'framework', and 'library'.
             Note: The return statement is currently commented out.
     """
-    # result = await dev_env_init_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "language": [result.content], "framework": [result.content], "library": [result.content]}
+
+    payload = {
+        # 프롬프트는 문자열을 기대하므로 join
+        "requirements": "\n".join(state.get("requirements", [])),
+        "user_scenarios": "\n".join(state.get("user_scenarios", [])),
+        "processes": "\n".join(state.get("processes", [])),
+        "domain_entities": "\n".join(state.get("domain_entities", [])),
+        "non_functional_reqs": "\n".join(state.get("non_functional_reqs", [])),
+    }
+
+    result = await dev_env_init_chain.ainvoke(payload)
+    raw = getattr(result, "content", result)
+    # print("dev_env_init raw:", raw)
+
+    # 1) JSON 파싱
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        # 안전장치: 파싱 실패 시 빈값 반환
+        parsed = {"language": {}, "framework": {}, "library": {}}
+
+    # 2) 스키마 정규화
+    lang_fe = _ensure_list(parsed.get("language", {}).get("frontend"))
+    lang_be = _ensure_list(parsed.get("language", {}).get("backend"))
+    fw_fe   = _ensure_list(parsed.get("framework", {}).get("frontend"))
+    fw_be   = _ensure_list(parsed.get("framework", {}).get("backend"))
+    lib_fe  = _ensure_list(parsed.get("library", {}).get("frontend"))
+    lib_be  = _ensure_list(parsed.get("library", {}).get("backend"))
+
+    # 3) 화이트리스트 필터링
+    lang_fe = _take_allowed(lang_fe, APPROVED["language"]["frontend"])
+    lang_be = _take_allowed(lang_be, APPROVED["language"]["backend"])
+    fw_fe   = _take_allowed(fw_fe,   APPROVED["framework"]["frontend"])
+    fw_be   = _take_allowed(fw_be,   APPROVED["framework"]["backend"])
+    lib_fe  = _take_allowed(lib_fe,  APPROVED["library"]["frontend"])
+    lib_be  = _take_allowed(lib_be,  APPROVED["library"]["backend"])
+
+    # 4) 평탄화 & 중복 제거 (최종 state 스키마에 맞춤)
+    language  = _dedup(lang_fe + lang_be)
+    framework = _dedup(fw_fe + fw_be)
+    library   = _dedup(lib_fe + lib_be)
+
+    return {
+        "messages": [result],
+        "language": language,
+        "framework": framework,
+        "library": library,
+    }
 
 async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
     """Creates a high-level development plan with main goals and sub-goals.
@@ -184,8 +295,31 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
             'messages', along with the 'main_goals' and 'sub_goals' for the project.
             Note: The return statement is currently commented out.
     """
-    # result = await dev_planning_chain.ainvoke({'messages': state['messages']})
-    # return {"messages": [result], "main_goals": [result.content], "sub_goals": [result.content]}
+    payload = {
+        "requirements": "\n".join(state.get("requirements", [])),            # ← OverallState로부터 접근하거나 이전 노드에서 넣어두기
+        "user_scenarios": "\n".join(state.get("user_scenarios", [])),
+        "processes": "\n".join(state.get("processes", [])),
+        "domain_entities": "\n".join(state.get("domain_entities", [])),
+        "non_functional_reqs": "\n".join(state.get("non_functional_reqs", [])),
+
+        "language": ", ".join(state.get("language", [])),
+        "framework": ", ".join(state.get("framework", [])),
+        "library": ", ".join(state.get("library", [])),
+    }
+
+    result = await dev_planning_chain.ainvoke(payload)
+    raw = getattr(result, "content", result)
+
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        parsed = {"main_goals": [], "sub_goals": {}}
+
+    return {
+        "messages": [result],
+        "main_goals": parsed.get("main_goals", []),
+        "sub_goals": parsed.get("sub_goals", {})
+    }
 
 async def architect(state: DevPlanningState) -> ArchitectState:
     """Acts as the software architect to implement the main goals.
@@ -240,7 +374,7 @@ async def role_allocate(state: DevPlanningState) -> RoleAllocateState:
     if sub_goals is None:
         return
 
-    result = await role_allocate_chain.ainvoke({'messages': state['messages']})
+    # result = await role_allocate_chain.ainvoke({'messages': state['messages']})
     # return {"messages": [result], "sub_goals": [result.content]}
 
 def allocate_decision(state: RoleAllocateState, config: RunnableConfig):

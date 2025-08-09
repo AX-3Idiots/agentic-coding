@@ -12,6 +12,10 @@ import os
 setup_logging()
 load_dotenv()
 
+# LoggingCallbackHandler 인스턴스 생성
+logger = logging.getLogger(__name__)
+callback_handler = LoggingCallbackHandler(logger, "default_session")
+
 app = FastAPI(
     title="agentic-coding",
     description="Agentic Coding",
@@ -26,8 +30,8 @@ class Request(BaseModel):
 async def read_root(request: Request):
     response = await graph.ainvoke(
             {"messages": [HumanMessage(content=request.input)]},
-            config={
-                "callbacks": [LoggingCallbackHandler]
+            config={                
+                "callbacks": [callback_handler]
             },
     )
     return {"response": response}
