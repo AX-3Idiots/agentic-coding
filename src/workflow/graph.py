@@ -1,8 +1,8 @@
 from __future__ import annotations
 import json
+import asyncio
 
 from langgraph.graph import StateGraph, START, END, add_messages
-from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Send
 from langchain_aws import ChatBedrockConverse
 import boto3
@@ -160,7 +160,17 @@ class OverallState(TypedDict):
     agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
     response: str
 
-bedrock_client = boto3.client("bedrock-runtime", region_name=os.environ["AWS_DEFAULT_REGION"])
+config = Config(
+    read_timeout=900,
+    connect_timeout=120,
+    retries={"max_attempts": 5},
+)
+
+bedrock_client = boto3.client(
+    "bedrock-runtime",
+    region_name=os.environ["AWS_DEFAULT_REGION"],
+    config=config,
+)
 
 llm = ChatBedrockConverse(
     model=AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
@@ -440,7 +450,7 @@ async def spawn_engineers(state: EngineerState) -> ArchitectState:
     if len(user_story) == 0:
         return
 
-    return spawn_engineers_tool(
+    return asyncio.to_thread(spawn_engineers_tool,
         state['base_url'],
         user_story
     )
