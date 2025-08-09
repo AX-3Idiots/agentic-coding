@@ -29,3 +29,4 @@ logs
 .*.sw?
 .cache
 .env
+test

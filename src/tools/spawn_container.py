@@ -5,22 +5,29 @@ from docker.errors import ImageNotFound, NotFound
 from ..constants.aws_model import AWSModel
 from ..prompts.se_agent_prompts import se_agent_prompts_v1
 import json
+import uuid
+import time
 
 load_dotenv()
 
-TIME_OUT = "10m"
+TIME_OUT = "600"
 
 client = docker.from_env()
 image = None
+
+# Construct the absolute path to the docker build context directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+src_path = os.path.join(script_dir, "..")
+
 try:
     image = client.images.get("se-agent:latest")
     print("Image already exists")
 except ImageNotFound:
     print("Image not found, building...")    
-    image, build_logs = client.images.build(path="docker", tag="se-agent:latest")
+    image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
     print(f"Image built successfully::: {build_logs}")
 
-def spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
+def _spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
     """
     Spawn a container for each job.
     The container will implement the job using the claude-code.
@@ -34,26 +41,33 @@ def spawn_containers(git_url:str, jobs: list[str]) -> list[str]:
     """
     container_ids = []
     for job in jobs:
+        volume_name = f"se-agent-volume-{uuid.uuid4()}"
+        volume = client.volumes.create(name=volume_name)
         container = client.containers.run(
             image,            
-            command=job, 
+            mem_limit="4g",
+            cpu_quota=200000,
+            cpu_period=100000,
+            network_mode="host",
             detach=True,
             environment={
                 "GIT_URL": git_url,
                 "AWS_REGION": os.environ["AWS_DEFAULT_REGION"],
                 "CLAUDE_CODE_USE_BEDROCK": "1",
-                "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
-                "SYSTEM_PROMPT": se_agent_prompts_v1.prompt.template,
+                "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION.value,
+                "SYSTEM_PROMPT": se_agent_prompts_v1.prompt.messages[0].prompt.template.strip(),
                 "USER_INPUT": job,
                 "TIME_OUT": TIME_OUT,
-                "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
-                "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
+                "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
+                "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
+                "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN"),
             },
+            volumes={volume.name: {"bind": "/app", "mode": "rw"}},
         )
         container_ids.append(container.id)
     return container_ids
 
-def is_container_running(container_ids: list[str]) -> bool:
+def _is_container_running(container_ids: list[str]) -> bool:
     """
     Check the status of the containers.
 
@@ -76,7 +90,7 @@ def is_container_running(container_ids: list[str]) -> bool:
             continue
     return False
 
-def get_container_results(container_ids: list[str]) -> list[dict]:
+def _get_container_results(container_ids: list[str]) -> list[dict]:
     """
     Get the logs of the exited containers and parse the results.
 
@@ -96,10 +110,9 @@ def get_container_results(container_ids: list[str]) -> list[dict]:
 
             # Get logs
             logs = container.logs().decode('utf-8').strip().split('\n')
-            
+            print(f"Logs for {container_id}:\n{logs}")
             # The last line should be our JSON result
-            last_line = logs[-1] if logs else ''
-            
+            last_line = logs[-1] if logs else ''            
             result_data = {}
             try:
                 # Parse the JSON from the last line
@@ -135,15 +148,62 @@ def get_container_results(container_ids: list[str]) -> list[dict]:
 
     return results
 
-def remove_containers(container_ids: list[str]) -> None:
+def _remove_containers(container_ids: list[str]) -> None:
     """
-    Remove the containers.
+    Remove the containers and their associated volumes.
     """
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
+            
+            # Get volume names from the container's attributes before removing it
+            mounts = container.attrs.get('Mounts', [])
+            volume_names = []
+            for mount in mounts:
+                if mount.get('Type') == 'volume':
+                    volume_name = mount.get('Name')
+                    if volume_name:
+                        volume_names.append(volume_name)
+
+            # Stop and remove the container first to release the volume
             container.remove(force=True)
+
+            # Now that the container is gone, remove its volumes
+            for volume_name in volume_names:
+                try:
+                    volume = client.volumes.get(volume_name)
+                    volume.remove(force=True)
+                except NotFound:
+                    # This can happen if the volume was manually removed or never created properly
+                    continue
         except NotFound:
+            # This can happen if the container was already removed
             continue
-def spawn_engineers():
-    pass
+
+def spawn_engineers(git_url: str, jobs: list[str]) -> list[dict]:
+    """
+    Spawn a container for each job and clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
+
+    Args:
+        git_url (str): The URL of the repository to clone.
+        jobs (list[str]): A list of jobs to spawn.
+
+    Returns:
+        list[dict]: A list of dictionaries, each containing code and cost.
+    """
+    container_ids = []
+    try:
+        container_ids = _spawn_containers(git_url, jobs)
+        while _is_container_running(container_ids):
+            print("Waiting for containers to finish...")
+            time.sleep(10)
+        results = _get_container_results(container_ids)
+        return results
+    except Exception as e:
+        print(f"An error occurred while spawning containers: {e}")
+        return []
+    finally:
+        if container_ids:
+            _remove_containers(container_ids)
+    
