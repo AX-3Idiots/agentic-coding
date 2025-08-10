@@ -419,6 +419,7 @@ async def spawn_engineers(state: OverallState) -> ArchitectState:
         results = await asyncio.to_thread(
             spawn_engineers_tool,
             state['base_url'],
+            state['branch_name'],
             user_story_groups,
         )
     except Exception:

@@ -32,13 +32,14 @@ except ImageNotFound:
     image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
     print(f"Image built successfully::: {build_logs}")
 
-def _spawn_containers(git_url:str, jobs: list[dict]) -> list[str]:
+def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[str]:
     """
     Spawn a container for each job.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
+        branch_name (str): The name of the branch to create.
         jobs (list[dict]): A list of jobs to spawn.
 
     Returns:
@@ -65,7 +66,9 @@ def _spawn_containers(git_url:str, jobs: list[dict]) -> list[str]:
                 "TIME_OUT": TIME_OUT,
                 "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
                 "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
-                "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN"),
+                "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
+                "BRANCH_NAME": branch_name,
+                "JOB_NAME": job.get("group_name"),
             },
             volumes={volume.name: {"bind": "/app", "mode": "rw"}},
         )
@@ -185,13 +188,14 @@ def _remove_containers(container_ids: list[str]) -> None:
             # This can happen if the container was already removed
             continue
 
-def spawn_engineers(git_url: str, jobs: list[dict]) -> list[dict]:
+def spawn_engineers(git_url: str, branch_name: str, jobs: list[dict]) -> list[dict]:
     """
     Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
+        branch_name (str): The name of the branch to create.
         jobs (list[dict]): A list of jobs to spawn.
 
     Returns:
@@ -199,7 +203,7 @@ def spawn_engineers(git_url: str, jobs: list[dict]) -> list[dict]:
     """
     container_ids = []
     try:
-        container_ids = _spawn_containers(git_url, jobs)
+        container_ids = _spawn_containers(git_url, branch_name, jobs)
         while _is_container_running(container_ids):
             print("Waiting for containers to finish...")
             time.sleep(10)

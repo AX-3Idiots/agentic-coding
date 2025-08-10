@@ -2,12 +2,12 @@
 set -e
 echo "Cloning $GIT_URL..."
 if [[ -n "$GITHUB_TOKEN" ]]; then
-    GIT_URL_WITH_TOKEN=$(echo "$GIT_URL" | sed "s|https://|https://oauth2:${GITHUB_TOKEN}@|")
-    git clone "$GIT_URL_WITH_TOKEN" project
-else
-    git clone "$GIT_URL" project
+    git clone https://x-access-token:$GITHUB_TOKEN@$GIT_URL project
+else    
+    echo "Error: GITHUB_TOKEN is not set" >&2
+    exit 1
 fi
-cd project
+cd project && git checkout -b $BRANCH_NAME
 echo "Running Claude-Code..."
 error_log=$(mktemp)
 trap 'rm -f "$error_log"' EXIT # Clean up on exit
@@ -32,3 +32,5 @@ fi
 # At the end of the script, output the final result as a single JSON line
 # so it can be captured by the container logs.
 echo "$result" | jq -c '{code: .result, cost_usd: .total_cost_usd}'
+
+git add . && git commit -m "feat: add $BRANCH_NAME" && git push -u origin $BRANCH_NAME
