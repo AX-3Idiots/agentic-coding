@@ -13,7 +13,7 @@ error_log=$(mktemp)
 trap 'rm -f "$error_log"' EXIT # Clean up on exit
 
 # Run the claude command and check its exit status
-if ! result=$(timeout "$TIME_OUT" claude -p "$USER_INPUT" --append-system-prompt "$SYSTEM_PROMPT" --output-format json --verbose 2> "$error_log"); then
+if ! result=$(timeout "$TIME_OUT" claude -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json --verbose 2> "$error_log"); then
     error_content=$(cat "$error_log")
     echo "Error: The 'claude' command failed." >&2
     echo "--- Stderr ---" >&2
