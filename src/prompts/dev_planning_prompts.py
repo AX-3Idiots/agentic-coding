@@ -122,7 +122,6 @@ Produce a FULL execution-ready plan that downstream nodes can implement without 
 - Respect the chosen stack strictly; if something is not listed, leave it empty.
 - Derive priorities using non-functional requirements (security/latency/availability).
 - Enforce correct dependency ordering: BE endpoints/models before FE consumption; schema before migrations; migrations before runtime.
-- Include enough detail for CI/CD and tests to run green without extra context.
 </comprehensiveness_rules>
 
 <output_schema>
@@ -131,9 +130,7 @@ Produce a FULL execution-ready plan that downstream nodes can implement without 
     {{
       "id": "G1",
       "title": "Authentication & User Management",
-      "rationale": "Access control aligned to security NFRs",
-      "priority": "P1",
-      "story_points_total": 0
+      "rationale": "Access control aligned to security NFRs"
     }}
   ],
   "sub_goals": {{
@@ -142,21 +139,13 @@ Produce a FULL execution-ready plan that downstream nodes can implement without 
         "id": "G1-S1",
         "title": "Login/Logout API (JWT)",
         "owner": "BE",
-        "stack": {{"language": [], "framework": [], "library": []}},
         "description": "Implement stateless auth with JWT including token refresh.",
-        "estimated_points": 5,
         "dependencies": [],
         "acceptance_criteria": [
           "POST /auth/login returns JWT (200) on valid creds; 401 otherwise",
           "POST /auth/refresh returns new token with valid refresh token",
           "Blacklist/rotation rules documented"
-        ],
-        "interfaces": [
-          {{"type":"REST","method":"POST","path":"/auth/login","status":[200,401]}},
-          {{"type":"REST","method":"POST","path":"/auth/refresh","status":[200,401,403]}}
-        ],
-        "deliverables": ["API spec (OpenAPI snippet)", "Unit tests", "Integration tests"],
-        "sequence": 1
+        ]
       }}
     ]
   }},
@@ -174,169 +163,6 @@ Produce a FULL execution-ready plan that downstream nodes can implement without 
     "repo/backend/tests/",
     "repo/infra/ci/",
     "repo/infra/scripts/"
-  ],
-
-  "bootstrap_instructions": {{
-    "frontend": [
-      "Shell commands to scaffold the FE project with the chosen framework",
-      "Install and wire state mgmt (e.g., Zustand) and HTTP client (Axios) if applicable"
-    ],
-    "backend": [
-      "Shell commands to scaffold the BE project with the chosen framework",
-      "Add ORM and create initial app module (e.g., FastAPI router or Spring Boot controller)"
-    ]
-  }},
-
-  "api_spec": [
-    {{
-      "path": "/auth/login",
-      "method": "POST",
-      "summary": "Authenticate user",
-      "request": {{"body": {{"username":"string","password":"string"}}}},
-      "responses": {{
-        "200": {{"json": {{"access_token":"string","refresh_token":"string"}}}},
-        "401": {{"json": {{"error":"invalid_credentials"}}}}
-      }}
-    }}
-  ],
-
-  "data_model": [
-    {{
-      "entity": "User",
-      "table": "users",
-      "fields": [
-        {{"name":"id","type":"UUID","pk":true}},
-        {{"name":"email","type":"VARCHAR(255)","unique":true}},
-        {{"name":"password_hash","type":"VARCHAR(255)"}},
-        {{"name":"created_at","type":"TIMESTAMP"}}
-      ],
-      "indexes": [["email"]],
-      "relations": []
-    }}
-  ],
-
-  "migrations": [
-    {{
-      "id": "001_init_users",
-      "changes": [
-        "create table users(...columns as per data_model...)",
-        "unique index on email"
-      ]
-    }}
-  ],
-
-  "seed_data": [
-    {{
-      "entity":"User",
-      "rows":[
-        {{"email":"admin@example.com","password_hash":"<hashed>"}}
-      ]
-    }}
-  ],
-
-  "env_vars": [
-    {{"name":"APP_ENV","required":true,"example":"dev"}},
-    {{"name":"DB_URL","required":true,"example":"mysql://user:pass@host/db"}},
-    {{"name":"JWT_SECRET","required":true,"example":"<32+ chars>"}}
-  ],
-
-  "test_plan": {{
-    "unit": [
-      "Auth service: token issuance/verification",
-      "Validators and data mappers"
-    ],
-    "integration": [
-      "Login flow end-to-end",
-      "DB migrations apply cleanly and rollback works"
-    ],
-    "e2e": [
-      "User can sign in on FE, token stored safely, protected routes accessible"
-    ],
-    "coverage_targets": {{
-      "lines": 0.8,
-      "branches": 0.7
-    }}
-  }},
-
-  "ci_cd": {{
-    "pipeline": [
-      "Install deps",
-      "Static checks (lint, type-check if any)",
-      "Run unit + integration tests",
-      "Build artifacts",
-      "Package & push image",
-      "Run DB migrations",
-      "Deploy to environment"
-    ],
-    "checks": [
-      "Fail if coverage below targets",
-      "Block merge if tests fail"
-    ]
-  }},
-
-  "milestones": [
-    {{"name":"M1 - Auth baseline","target_week":"W2"}},
-    {{"name":"M2 - Core domain APIs","target_week":"W3"}}
-  ],
-
-  "risks": [
-    {{"id":"R1","risk":"Schema drift with evolving requirements","mitigation":"Migration discipline + ADRs"}},
-    {{"id":"R2","risk":"JWT revocation complexity","mitigation":"Short TTL + refresh + server-side blacklisting if needed"}}
-  ],
-
-  "assumptions": [
-    "Single database for MVP",
-    "Email is unique user identifier"
-  ],
-
-  "open_questions": [
-    "Do we require SSO or social login?",
-    "What is the target RPS and p95 latency requirement?"
-  ],
-
-  "delivery_plan": [
-    {{
-      "sprint": 1,
-      "goals": ["G1 partial completion"],
-      "owners": [
-        {{"name":"FE-1","focus":["G1 FE tasks"]}},
-        {{"name":"BE-1","focus":["G1 BE tasks"]}}
-      ]
-    }},
-    {{
-      "sprint": 2,
-      "goals": ["G2 majority completion"],
-      "owners": [
-        {{"name":"FE-1","focus":["G2 FE tasks"]}},
-        {{"name":"BE-1","focus":["G2 BE tasks"]}}
-      ]
-    }}
-  ],
-
-  "definitions_of_done": [
-    "All acceptance criteria satisfied",
-    "Code reviewed and merged",
-    "Tests green, coverage targets met",
-    "CI/CD pipeline passes, deployment verified",
-    "Runbook updated"
-  ],
-
-  "runbooks": [
-    {{
-      "name":"User onboarding incident",
-      "steps":[
-        "Check API health /auth/login, /auth/refresh",
-        "Inspect logs for auth errors",
-        "Invalidate compromised tokens if any",
-        "Create incident ticket with timeline"
-      ]
-    }}
-  ],
-
-  "coding_standards": [
-    "Consistent error model for APIs",
-    "Avoid shared mutable state; use store slices (FE) and services (BE)",
-    "SQL/ORM migrations must be idempotent and reversible"
   ]
 }}
 </output_schema>
