@@ -36,6 +36,7 @@ For each sub-goal, you will:
 2. Write each user story following the standard format: "As a [type of user], I want [to perform some action] so that [I can achieve some goal]."
 3. For each user story, provide detailed Acceptance Criteria. These should be a set of testable conditions that must be met for the story to be considered complete.
 
+[**IMPORTANT**]
 <grouping_logic>
 To prevent conflicts and ensure smooth integration, you must group related user stories.
 - Stories that modify the same set of files or modules should be in the same group.
@@ -43,7 +44,10 @@ To prevent conflicts and ensure smooth integration, you must group related user 
 - Stories with dependencies on each other should be grouped, with the dependency order noted.
 
 Each group will be assigned to a single agent or a coordinated team of agents to ensure code coherence.
+The maximum number of user stories in a group is 3 and the maximum number of groups is 3.
+YOU MUST ALWAYS FOLLOW THESE RULES.
 </grouping_logic>
+[**IMPORTANT**]
 
 <output_format>
 Return ONLY valid JSON with the following shape:
