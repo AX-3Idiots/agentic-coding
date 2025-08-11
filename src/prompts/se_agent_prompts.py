@@ -141,7 +141,6 @@ When you are done implementing all the jobs, you **MUST** commit and push the ch
 IF there is a conflict, you **MUST** resolve it before finishing the session. 
 </end_of_session>
          
-        """),
-        ("user", "{messages}")
+        """)
     ])
 )

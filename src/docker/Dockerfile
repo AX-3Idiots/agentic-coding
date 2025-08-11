@@ -5,7 +5,7 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN mkdir -p /root/.claude && \
     echo '{ \
       "permissions": { \
-        "allow": [ "Read(*)", "Edit(*)", "Write(*)" ] \
+        "allow": [ "Read(*)", "Edit(*)", "Write(*)", "Bash(npm run lint)", "Bash(npm run test:*)", "Bash(git:*)" ] \
       }, \
       "defaultMode": "acceptEdits" \
     }' > /root/.claude/settings.json

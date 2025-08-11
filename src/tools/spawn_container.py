@@ -48,6 +48,9 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[st
     container_ids = []
     for job in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
+        user_input = json.dumps(job)
+        system_prompt = se_agent_prompts_v1.prompt.invoke({"language": "Javascript", "framework": "React", "library": "Any"}).messages[0].content
+        
         volume = client.volumes.create(name=volume_name)
         container = client.containers.run(
             image,            
@@ -61,14 +64,15 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[st
                 "AWS_REGION": os.environ["AWS_DEFAULT_REGION"],
                 "CLAUDE_CODE_USE_BEDROCK": "1",
                 "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION.value,
-                "SYSTEM_PROMPT": se_agent_prompts_v1.prompt.messages[0].prompt.template.strip(),
-                "USER_INPUT": json.dumps(job),
+                "SYSTEM_PROMPT": system_prompt,
+                "USER_INPUT": user_input,
                 "TIME_OUT": TIME_OUT,
                 "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
                 "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
                 "BRANCH_NAME": branch_name,
                 "JOB_NAME": job.get("group_name"),
+                "INSTALLATION_ID": os.environ.get("INSTALLATION_ID"),
             },
             volumes={volume.name: {"bind": "/app", "mode": "rw"}},
         )
@@ -134,7 +138,8 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
                 'container_id': container_id,
                 'code': result_data.get('code'),
                 'cost_usd': result_data.get('cost_usd'),
-                'error': result_data.get('error')
+                'error': result_data.get('error'),
+                'log': logs[:-1]
             })
 
         except NotFound:
