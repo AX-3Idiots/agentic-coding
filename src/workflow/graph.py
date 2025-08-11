@@ -82,75 +82,18 @@ def _dedup(seq: List[str]) -> List[str]:
             out.append(v)
     return out
 
-class InputState(TypedDict):
-    """Input state for the AI CM graph."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    base_url: str
-
-class OutputState(TypedDict):
-    """Output state for the AI CM graph."""
-    response: str
-
-class DefineReqState(TypedDict):
-    """State for the define req node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    project_name: str
-    requirements: List[str]
-    user_scenarios: List[str]
-    processes: List[str]
-    domain_entities: List[str]
-    non_functional_reqs: List[str]
-    exclusions: List[str]
-
-class DevEnvInitState(TypedDict):
-    """State for the dev env init node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    language: list[str]
-    framework: list[str]
-    library: list[str]
-
-class DevPlanningState(TypedDict):
-    """State for the dev planning node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    main_goals: list[str]
-    sub_goals: dict[str, list[str]]
-
-class ArchitectState(TypedDict):
-    """State for the software architect node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    main_goals: list[str]
-    fe_branch_name: str
-    be_branch_name: str
-    base_url: str
-    branch_url: str
-    project_dir: str
-
-class RoleAllocateState(TypedDict):
-    """State for the role allocate node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    requirements: List[str]
-    user_scenarios: List[str]
-    processes: List[str]
-    domain_entities: List[str]
-    non_functional_reqs: List[str]
-    exclusions: List[str]
-    sub_goals: dict[str, list[str]]
-
-class EngineerState(TypedDict):
-    """State for the software engineer node."""
-    base_url: str
-    user_story_groups: list[dict[str, list[str] | str]]
-
-class ResolverState(TypedDict):
-    """State for the resolver node."""
-    messages: Annotated[List[AnyMessage], add_messages]
-    agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
-
 class OverallState(TypedDict):
     """State for the overall graph."""
     messages: Annotated[List[AnyMessage], add_messages]
+    base_url: str
+    response: str
     project_name: str
-    requirements: list[str]
+    requirements: List[str]
+    user_scenarios: List[str]
+    processes: List[str]
+    domain_entities: List[str]
+    non_functional_reqs: List[str]
+    exclusions: List[str]
     language: list[str]
     framework: list[str]
     library: list[str]
@@ -159,12 +102,10 @@ class OverallState(TypedDict):
     fe_branch_name: str
     be_branch_name: str
     project_dir: str
-    base_url: str
     branch_url: str
-    agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
-    response: str
     user_story_groups: list[dict[str, list[str] | str]]
-
+    agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
+    
 config = Config(
     read_timeout=900,
     connect_timeout=120,
@@ -204,7 +145,7 @@ resolver_agent = create_resolver_agent(
     name="resolver_agent"
 )
 
-async def define_req(state: InputState) -> DefineReqState:
+async def define_req(state: OverallState):
     """Processes the initial user input to define project requirements.
 
     This node invokes a language model chain (`req_def_chain`) to analyze the
@@ -233,7 +174,7 @@ async def define_req(state: InputState) -> DefineReqState:
         "exclusions": result.get("not_in_scope", [])
     }
 
-async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
+async def dev_env_init(state: OverallState):
     """Determines the technical stack for the development environment.
 
     Based on the defined requirements, this node invokes a language model chain
@@ -298,7 +239,7 @@ async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
         "library": library,
     }
 
-async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
+async def dev_planning(state: OverallState):
     """Creates a high-level development plan with main goals and sub-goals.
 
     This node uses the context of the technical stack to invoke the
@@ -336,7 +277,7 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
         "sub_goals": parsed.get("sub_goals", {})
     }
 
-async def architect(state: DevPlanningState) -> ArchitectState:
+async def architect(state: OverallState):
     """Acts as the software architect to implement the main goals.
 
     This node invokes the `architect_agent_chain` to review and potentially
@@ -461,7 +402,7 @@ async def architect(state: DevPlanningState) -> ArchitectState:
     }
 
 
-async def role_allocate(state: RoleAllocateState) -> EngineerState:
+async def role_allocate(state: OverallState):
     """Allocates sub-goals to different developer roles or agents.
 
     This node uses the `role_allocate_chain` to process the sub-goals and
@@ -492,7 +433,7 @@ async def role_allocate(state: RoleAllocateState) -> EngineerState:
     })
     return {"messages": [AIMessage(content=json.dumps(result))], "user_story_groups": result.get("user_story_groups", [])}
 
-async def spawn_engineers(state: OverallState) -> ArchitectState:
+async def spawn_engineers(state: OverallState):
     """A placeholder node for the software engineer agents' work.
 
     In a complete implementation, this node would likely be replaced by a
@@ -528,7 +469,7 @@ async def spawn_engineers(state: OverallState) -> ArchitectState:
 
     return {"agent_results": results}
 
-async def resolver(state: ArchitectState) -> OutputState:
+async def resolver(state: OverallState):
     """Aggregates results from all agents and synthesizes a final response.
 
     This node collects the outputs from all preceding agent nodes, which are
@@ -560,7 +501,7 @@ async def resolver(state: ArchitectState) -> OutputState:
     # result = await resolver_chain.ainvoke({'messages': state['messages']})
     return {"messages": result['messages'], "response": result['resolver_result']}
 
-graph_builder = StateGraph(input=InputState, output=OutputState, state_schema=OverallState)
+graph_builder = StateGraph(state_schema=OverallState)
 graph_builder.add_node("define_req", define_req)
 graph_builder.add_node("dev_env_init", dev_env_init)
 graph_builder.add_node("dev_planning", dev_planning)
@@ -575,11 +516,11 @@ graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
 graph_builder.add_edge("dev_planning", "architect")
 graph_builder.add_edge("architect", END)
-# graph_builder.add_edge("dev_planning", "architect")
-# graph_builder.add_edge("architect", "role_allocate")
-# graph_builder.add_edge("role_allocate", "spawn_engineers")
-# graph_builder.add_edge("spawn_engineers", "resolver")
-# graph_builder.add_edge("resolver", END)
+graph_builder.add_edge("dev_planning", "architect")
+graph_builder.add_edge("architect", "role_allocate")
+graph_builder.add_edge("role_allocate", "spawn_engineers")
+graph_builder.add_edge("spawn_engineers", "resolver")
+graph_builder.add_edge("resolver", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"
