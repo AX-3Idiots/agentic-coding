@@ -94,6 +94,7 @@ class OutputState(TypedDict):
 class DefineReqState(TypedDict):
     """State for the define req node."""
     messages: Annotated[List[AnyMessage], add_messages]
+    project_name: str
     requirements: List[str]
     user_scenarios: List[str]
     processes: List[str]
@@ -147,6 +148,7 @@ class ResolverState(TypedDict):
 class OverallState(TypedDict):
     """State for the overall graph."""
     messages: Annotated[List[AnyMessage], add_messages]
+    project_name: str
     requirements: list[str]
     language: list[str]
     framework: list[str]
@@ -181,7 +183,7 @@ llm = ChatBedrockConverse(
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
-req_def_chain = req_def_prompts.prompt | llm
+req_def_chain = req_def_prompts.prompt | llm | JsonOutputParser()
 dev_env_init_chain = dev_env_init_prompts.prompt | llm
 dev_planning_chain = dev_planning_prompts_v2.prompt | llm | JsonOutputParser()
 role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
@@ -216,15 +218,17 @@ async def define_req(state: InputState) -> DefineReqState:
             list of strings.
     """
     result = await req_def_chain.ainvoke({'messages': state['messages']})
-
+    
+    # result is now a parsed JSON dict
     return {
-        "messages": [result],
-        "requirements": parse_section(result.content, "Functional Requirements"),
-        "user_scenarios": parse_section(result.content, "User Scenarios"),
-        "processes": parse_section(result.content, "Process Flow"),
-        "domain_entities": parse_section(result.content, "Domain Entities"),
-        "non_functional_reqs": parse_section(result.content, "Non-functional Requirements"),
-        "exclusions": parse_section(result.content, "Not in Scope")
+        "messages": [AIMessage(content=json.dumps(result))],
+        "project_name": result.get("project_name", "Untitled Project"),
+        "requirements": result.get("functional_requirements", []),
+        "user_scenarios": result.get("user_scenarios", []),
+        "processes": result.get("process_flow", []),
+        "domain_entities": result.get("domain_entities", []),
+        "non_functional_reqs": result.get("non_functional_requirements", []),
+        "exclusions": result.get("not_in_scope", [])
     }
 
 async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
@@ -245,6 +249,7 @@ async def dev_env_init(state: DefineReqState) -> DevEnvInitState:
 
     payload = {
         # 프롬프트는 문자열을 기대하므로 join
+        "project_name": state.get("project_name", "Untitled Project"),
         "requirements": "\n".join(state.get("requirements", [])),
         "user_scenarios": "\n".join(state.get("user_scenarios", [])),
         "processes": "\n".join(state.get("processes", [])),
@@ -308,6 +313,7 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
             Note: The return statement is currently commented out.
     """
     payload = {
+        "project_name": state.get("project_name", "Untitled Project"),
         "requirements": "\n".join(state.get("requirements", [])),            # ← OverallState로부터 접근하거나 이전 노드에서 넣어두기
         "user_scenarios": "\n".join(state.get("user_scenarios", [])),
         "processes": "\n".join(state.get("processes", [])),
