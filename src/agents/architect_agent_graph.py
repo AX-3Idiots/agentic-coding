@@ -10,12 +10,14 @@ from langchain_core.prompts import ChatPromptTemplate
 from ..models.schemas import ArchitectAgentResult
 from typing import List, Dict, Optional
 from langchain_core.messages import HumanMessage
-import json
+import json,re
 class ArchitectState(ToolState):
     """Architect 에이전트 전용으로 확장된 상태"""
     # 입력 데이터
     main_goals: List[str]
     sub_goals: Dict[str, List[str]]
+    project_name: str
+    branch_name: str
     # 최종 결과
     architect_result: Optional[ArchitectAgentResult]
 
@@ -45,14 +47,23 @@ def create_architect_agent(
       """
       try:
           # Attempt to parse the JSON from the last message's content
-          last_message = json.loads(state['messages'][-1].content)
+          content = state['messages'][-1].content
+          match = re.search(r'\{.*\}', content, re.DOTALL)
+          if match:
+            json_str = match.group(0)
+            last_message = json.loads(json_str)
+          else:
+            last_message = None
+
           # Ensure last_message is a dictionary to prevent errors on .get()
           if not isinstance(last_message, dict):
               raise json.JSONDecodeError("Content is not a JSON object.", state['messages'][-1].content, 0)
+          message = last_message.get("tool_code", {})
       except (json.JSONDecodeError, TypeError):
           # If parsing fails, create a default object with error messages
           # This makes the agent more robust to unexpected LLM outputs.
-          last_message = {
+          message = {
+              "owner": "Error: Could not parse final output.",
               "project_dir": "Error: Could not parse final output.",
               "branch_name": "Error: Could not parse final output.",
               "base_url": "Error: Could not parse final output.",
@@ -60,10 +71,11 @@ def create_architect_agent(
           }
 
       final_result = ArchitectAgentResult(
-          project_dir=last_message.get('project_dir', 'Missing project_dir'),
-          main_branch=last_message.get('branch_name', 'Missing branch_name'),
-          base_url=last_message.get('base_url', 'Missing base_url'),
-          branch_url=last_message.get('branch_url', 'Missing branch_url')
+          owner=message.get('owner', 'Missing owner'),
+          project_dir=message.get('project_dir', 'Missing project_dir'),
+          main_branch=message.get('branch_name', 'Missing branch_name'),
+          base_url=message.get('base_url', 'Missing base_url'),
+          branch_url=message.get('branch_url', 'Missing branch_url')
       )
       return {"architect_result": final_result}
 
@@ -110,21 +122,27 @@ def _create_initial_prompt(state: ArchitectState) -> dict:
     입력받은 main_goals와 sub_goals를 사용하여
     LLM에게 전달할 첫 번째 HumanMessage를 생성합니다.
     """
-    main_goals = state['main_goals']
-    sub_goals = state['sub_goals']
-
     # f-string을 사용해 상세한 계획 메시지를 구성
     plan_text = f"""
     Here is the project plan. Please initialize the project based on it.
 
     <plan>
     <main_goals>
-    {main_goals}
+    {state['main_goals']}
     </main_goals>
     <sub_goals>
-    {sub_goals}
+    {state['sub_goals']}
     </sub_goals>
     </plan>
+
+    <project_name>
+    {state['project_name']}
+    </project_name>
+
+    <branch_name>
+    {state['branch_name']}
+    </branch_name>
+
     """
 
     # 구성된 텍스트를 HumanMessage로 만들어 messages 상태를 업데이트

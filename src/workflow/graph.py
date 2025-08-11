@@ -1,7 +1,7 @@
 from __future__ import annotations
-import json
+import json, time
 import asyncio
-
+from collections import defaultdict
 from langgraph.graph import StateGraph, START, END, add_messages
 from langgraph.types import Send
 from langchain_aws import ChatBedrockConverse
@@ -58,7 +58,7 @@ def parse_section(text: str, section_name: str) -> List[str]:
     match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
     if not match:
         return []
-    
+
     section = match.group(1).strip()
     lines = [line.strip("-• ").strip() for line in section.splitlines() if line.strip()]
     return lines
@@ -119,7 +119,8 @@ class ArchitectState(TypedDict):
     """State for the software architect node."""
     messages: Annotated[List[AnyMessage], add_messages]
     main_goals: list[str]
-    branch_name: str
+    fe_branch_name: str
+    be_branch_name: str
     base_url: str
     branch_url: str
     project_dir: str
@@ -155,7 +156,8 @@ class OverallState(TypedDict):
     library: list[str]
     main_goals: list[str]
     sub_goals: dict[str, list[str]]
-    branch_name: str
+    fe_branch_name: str
+    be_branch_name: str
     project_dir: str
     base_url: str
     branch_url: str
@@ -218,7 +220,7 @@ async def define_req(state: InputState) -> DefineReqState:
             list of strings.
     """
     result = await req_def_chain.ainvoke({'messages': state['messages']})
-    
+
     # result is now a parsed JSON dict
     return {
         "messages": [AIMessage(content=json.dumps(result))],
@@ -327,7 +329,7 @@ async def dev_planning(state: DevEnvInitState) -> DevPlanningState:
 
     result = await dev_planning_chain.ainvoke(payload)
     parsed = result
-    
+
     return {
         "messages": [AIMessage(content=json.dumps(parsed))],
         "main_goals": parsed.get("main_goals", []),
@@ -349,21 +351,113 @@ async def architect(state: DevPlanningState) -> ArchitectState:
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
+    start_time = time.perf_counter()
+    print("작업을 시작합니다...")
 
-    result = await architect_agent.ainvoke(
-        {
-            'main_goals': state['main_goals'],
-            'sub_goals': state['sub_goals']
-        },
-        config={"recursion_limit": 100}
-    )
+    main_goals = state.get("main_goals", [])
+    sub_goals_plan = state.get("sub_goals", {})
+    # project_name = state.get("project_name", "sample-project")
+    project_name = "sample-project"
+
+    # Main Goals 맵 생성
+    main_goals_map = {goal['id']: goal for goal in main_goals}
+
+    # Owner별 작업 취합
+    plan_builders = {
+        "BE": {"main_goals_map": {}, "sub_goals": defaultdict(list)}, # <--- defaultdict 사용
+        "FE": {"main_goals_map": {}, "sub_goals": defaultdict(list)}  # <--- defaultdict 사용
+    }
+
+    for goal_id, sub_goal_list in sub_goals_plan.items():
+        parent_main_goal = main_goals_map.get(goal_id)
+        if not parent_main_goal:
+            continue
+
+        for sub_goal in sub_goal_list:
+            owner = sub_goal.get("owner")
+            print(owner)
+            if owner in plan_builders:
+                builder = plan_builders[owner]
+                # main_goal 객체를 딕셔너리에 저장하여 자동으로 중복 제거
+                builder["main_goals_map"][goal_id] = parent_main_goal
+
+                keys_to_keep = {
+                    "id",
+                    "title",
+                    "description",
+                    "dependencies",
+                    "acceptance_criteria"
+                }
+
+                # 2. 새로운 딕셔너리를 만들어 원하는 키와 값만 복사
+                filtered_sub_goal = {
+                    key: sub_goal.get(key) for key in keys_to_keep
+                }
+                # sub_goal 추가
+                builder["sub_goals"][goal_id].append(filtered_sub_goal)
+
+    coroutines = []
+    running_tasks = []
+    fe_branch_name = ""
+    be_branch_name = ""
+    # 각 Owner(FE, BE)에 대해 실행할 작업을 생성
+    for owner, builder in plan_builders.items():
+        if not builder["sub_goals"]:
+            continue # 해당 owner에 대한 작업이 없으면 건너뛰기
+        print(builder["sub_goals"])
+
+        if running_tasks:
+            # 0.5초의 시간차를 둡니다.
+            await asyncio.sleep(0.5)
+        branch_name = f"{project_name}_{owner}"
+        if owner == "FE":
+            fe_branch_name = branch_name
+        else:
+            be_branch_name = branch_name
+
+        plan = {
+            "project_name": project_name,
+            "branch_name": branch_name,
+            "main_goals": list(builder["main_goals_map"].values()),
+            "sub_goals": builder["sub_goals"]
+        }
+
+        task = asyncio.create_task(
+            architect_agent.ainvoke(
+                plan,
+                config={"recursion_limit": 100}
+            )
+        )
+
+        running_tasks.append(task)
+
+    if running_tasks:
+        results = await asyncio.gather(*running_tasks)
+
+    for result in results:
+        res = result['architect_result']
+        if res.owner == "FE":
+            fe_branch_name = res.main_branch
+        else:
+            be_branch_name = res.main_branch
+
+    end_time = time.perf_counter()
+    print("작업이 끝났습니다!")
+
+    # 경과 시간 계산 (종료 시간 - 시작 시간)
+    elapsed_time = end_time - start_time
+
+    print(f"\n작업에 총 {elapsed_time:.4f}초가 걸렸습니다.")
+
 
     return {
-        "messages": result['messages'],
-        "project_dir": result['architect_result'].project_dir,
-        "branch_name": result['architect_result'].main_branch,
-        "base_url": result['architect_result'].base_url,
-        "branch_url": result['architect_result'].branch_url
+        "messages": results[0]['messages'],
+        "fe_branch_name": fe_branch_name,
+        "be_branch_name": be_branch_name
+        # "project_dir": result['architect_result'].project_dir,
+        # "branch_name": result['architect_result'].main_branch,
+        # "base_url": result['architect_result'].base_url,
+        # "branch_url": result['architect_result'].branch_url
     }
 
 
@@ -395,7 +489,7 @@ async def role_allocate(state: RoleAllocateState) -> EngineerState:
         'domain_entities': state['domain_entities'],
         'non_functional_reqs': state['non_functional_reqs'],
         'exclusions': state['exclusions']
-    })    
+    })
     return {"messages": [AIMessage(content=json.dumps(result))], "user_story_groups": result.get("user_story_groups", [])}
 
 async def spawn_engineers(state: OverallState) -> ArchitectState:
@@ -413,7 +507,7 @@ async def spawn_engineers(state: OverallState) -> ArchitectState:
             engineering work under the 'jobs' key.
             Note: The implementation is currently commented out.
     """
-    
+
     if not state['user_story_groups']:
         return {}
     user_story_groups = state['user_story_groups']
@@ -470,7 +564,7 @@ graph_builder = StateGraph(input=InputState, output=OutputState, state_schema=Ov
 graph_builder.add_node("define_req", define_req)
 graph_builder.add_node("dev_env_init", dev_env_init)
 graph_builder.add_node("dev_planning", dev_planning)
-# graph_builder.add_node("architect", architect)
+graph_builder.add_node("architect", architect)
 graph_builder.add_node("role_allocate", role_allocate)
 graph_builder.add_node("spawn_engineers", spawn_engineers)
 graph_builder.add_node("resolver", resolver)
@@ -479,12 +573,13 @@ graph_builder.add_edge(START, "define_req")
 graph_builder.add_edge("define_req", END)
 graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
-graph_builder.add_edge("dev_planning", "role_allocate")
+graph_builder.add_edge("dev_planning", "architect")
+graph_builder.add_edge("architect", END)
 # graph_builder.add_edge("dev_planning", "architect")
 # graph_builder.add_edge("architect", "role_allocate")
-graph_builder.add_edge("role_allocate", "spawn_engineers")
-graph_builder.add_edge("spawn_engineers", "resolver")
-graph_builder.add_edge("resolver", END)
+# graph_builder.add_edge("role_allocate", "spawn_engineers")
+# graph_builder.add_edge("spawn_engineers", "resolver")
+# graph_builder.add_edge("resolver", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"

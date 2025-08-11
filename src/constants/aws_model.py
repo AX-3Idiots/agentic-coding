@@ -46,7 +46,7 @@ class AWSModel(str, Enum):
     STABILITY_STABLE_DIFFUSION_CROSS_REGION = "us.stability.stable-diffusion-xl-v1-cross-region"
     STABILITY_STABLE_DIFFUSION_LITE_CROSS_REGION = "us.stability.stable-diffusion-xl-lite-v1-cross-region"
     ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
-
+    ANTHROPIC_CLAUDE_OPUS_4_1_CROSS_REGION = "us.anthropic.claude-opus-4-1-20250805-v1:0"
 
 
     @classmethod
