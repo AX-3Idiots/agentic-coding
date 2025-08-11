@@ -1,7 +1,7 @@
 import docker
 import os
 from dotenv import load_dotenv
-from docker.errors import ImageNotFound, NotFound, DockerException, BuildError
+from docker.errors import ImageNotFound, NotFound
 from ..constants.aws_model import AWSModel
 from ..prompts.se_agent_prompts import se_agent_prompts_v1
 import json
@@ -9,8 +9,6 @@ import uuid
 import time
 from ..logging_config import setup_logging
 import logging
-from docker.client import DockerClient
-from docker.models.images import Image
 
 load_dotenv()
 
@@ -19,55 +17,20 @@ logger = logging.getLogger(__name__)
 
 TIME_OUT = "600"
 
-_client: DockerClient | None = None
-_image: Image | None = None
-_image_build_checked = False
+client = docker.from_env()
+image = None
 
+# Construct the absolute path to the docker build context directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+src_path = os.path.join(script_dir, "..")
 
-def get_client() -> DockerClient:
-    """Get a docker client, initializing it if necessary."""
-    global _client
-    if _client is None:
-        try:
-            _client = docker.from_env()
-        except DockerException as e:
-            logger.error(f"Failed to connect to Docker. Is the Docker daemon running? Error: {e}")
-            raise
-    return _client
-
-
-def _ensure_image_exists() -> Image:
-    """Ensure the docker image exists, building it if it doesn't."""
-    global _image, _image_build_checked
-    if _image_build_checked and _image:
-        return _image
-
-    client = get_client()
-    try:
-        _image = client.images.get("se-agent:latest")
-        logger.info("Docker image 'se-agent:latest' already exists.")
-    except ImageNotFound:
-        logger.info("Docker image 'se-agent:latest' not found, building...")
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        src_path = os.path.join(script_dir, "..")
-        try:
-            image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
-            _image = image
-            logger.info("Docker image built successfully.")
-            for log in build_logs:
-                if 'stream' in log:
-                    logger.info(log['stream'].strip())
-        except BuildError as e:
-            logger.error(f"Failed to build Docker image: {e}")
-            for line in e.build_log:
-                if 'stream' in line:
-                    logger.error(line['stream'].strip())
-            raise
-    _image_build_checked = True
-    if not _image:
-        raise DockerException("Failed to get or build Docker image")
-    return _image
-
+try:
+    image = client.images.get("se-agent:latest")
+    print("Image already exists")
+except ImageNotFound:
+    print("Image not found, building...")    
+    image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
+    print(f"Image built successfully::: {build_logs}")
 
 def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[str]:
     """
@@ -82,8 +45,6 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[st
     Returns:
         list[str]: A list of container IDs.
     """
-    client = get_client()
-    image = _ensure_image_exists()
     container_ids = []
     for job in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
@@ -124,7 +85,6 @@ def _is_container_running(container_ids: list[str]) -> bool:
     Returns:
         bool: True if any container is running, False otherwise.
     """
-    client = get_client()
     if not container_ids:
         return False
         
@@ -148,7 +108,6 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
     Returns:
         list[dict]: A list of dictionaries, each containing code and cost.
     """
-    client = get_client()
     results = []
     for container_id in container_ids:
         try:
@@ -201,7 +160,6 @@ def _remove_containers(container_ids: list[str]) -> None:
     """
     Remove the containers and their associated volumes.
     """
-    client = get_client()
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
