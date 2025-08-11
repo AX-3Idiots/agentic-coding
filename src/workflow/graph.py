@@ -104,7 +104,7 @@ class OverallState(TypedDict):
     project_dir: str
     branch_url: str
     user_story_groups: list[dict[str, list[str] | str]]
-    agent_state: Annotated[List[Tuple[str, Dict[str, Any], int]], operator.add]
+    agent_results: list[dict]
     
 config = Config(
     read_timeout=900,
@@ -210,6 +210,7 @@ async def dev_env_init(state: OverallState):
     except Exception:
         # 안전장치: 파싱 실패 시 빈값 반환
         parsed = {"language": {}, "framework": {}, "library": {}}
+
 
     # 2) 스키마 정규화
     lang_fe = _ensure_list(parsed.get("language", {}).get("frontend"))
@@ -444,9 +445,18 @@ async def spawn_engineers(state: OverallState):
         state (RoleAllocateState): The state containing allocated sub-goals.
 
     Returns:
-        EngineerState: An updated state dictionary containing the results of the
-            engineering work under the 'jobs' key.
-            Note: The implementation is currently commented out.
+        agent_results: list[dict]: A list of dictionaries, each containing container_id, code, cost_usd, error, and log.        
+        For example:
+            [
+                {
+                    "container_id": "1234567890",
+                    "code": "...",
+                    "cost_usd": "...",
+                    "error": "...",
+                    "log": "..."
+                }
+                ...
+        ]
     """
 
     if not state['user_story_groups']:
