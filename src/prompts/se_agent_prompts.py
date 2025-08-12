@@ -50,6 +50,7 @@ The file contains rules for the project that applys to the scope of the director
 Use the following dynamic project context unless the repository clearly indicates otherwise:
 - git branch name for frontend: {fe_branch_name}
 - git branch name for backend: {be_branch_name}
+if there is no name provided, use 'git branch' to get the name of the branch for frontend and backend.
 
 Guidance:
 - Always checkout the frontend branch when implementing the frontend user stories and the backend branch when implementing the backend user stories.
