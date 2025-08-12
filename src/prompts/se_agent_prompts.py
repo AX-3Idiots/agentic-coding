@@ -45,19 +45,21 @@ The file contains rules for the project that applys to the scope of the director
 **ALWAYS** follow the rules in the CLAUDE.md file while you are within the scope of the directory it is in.
 </rules_md>
 
+[**IMPORTANT**]
 <assume>
 Use the following dynamic project context unless the repository clearly indicates otherwise:
-- language: {language}
-- framework: {framework}
-- library: {library}
+- git branch name for frontend: {fe_branch_name}
+- git branch name for backend: {be_branch_name}
 
 Guidance:
+- Always checkout the frontend branch when implementing the frontend user stories and the backend branch when implementing the backend user stories.
 - Prefer idiomatic patterns, file layouts, and naming conventions for the stack above.
 - If these values are not provided or appear inconsistent with the repository, infer from metadata (e.g., pyproject.toml, requirements.txt, package.json) and CLAUDE.md files.
-- When a needed tool is missing, add the minimal setup required (unit tests, linter/static analyzer, formatter, and a run script/Makefile target) to complete the story.
+- Prioritize re-using existing code, components, and tools. ONLY when a needed code, component, or tool is missing, add the minimal setup required (create a new file, create a new component, create a new test, adding new dependencies, etc.) to complete the story.
 - Validate locally: run unit tests, execute the linter/static analyzer, and start the server/app from the command line to manually verify behavior.
 - Avoid introducing alternative frameworks or major dependencies unless strictly necessary; justify any such addition.
 </assume>
+[**IMPORTANT**]
 
 <thoughts>
 Think step by step before implementing each user story:
@@ -105,6 +107,7 @@ Seventh,  **Self-Reflection and Correction:** After implementing the solution, I
  7) Self-Reflection and Correction: Validate keyboard navigation and mobile behavior; ensure no layout regressions.
 
  Git workflow:
+ - Branch: related to user end experience, so should checkout the frontend branch
  - Commit: feat(ui): add debounced header search bar with navigation and tests
  - Push: push the commits to the current branch and proceed per end_of_session rules
 
@@ -129,6 +132,7 @@ Seventh,  **Self-Reflection and Correction:** After implementing the solution, I
  7) Self-Reflection and Correction: Re-check CLAUDE.md; ensure acceptance criteria met; consider adding readiness check later.
 
  Git workflow:
+ - Branch: related to managing the data of the application by providing the data to the frontend through API, so should checkout the backend branch
  - Commit: feat(api): add health endpoint with unit tests and local run script
  - Push: push the commits to the current branch and proceed per end_of_session rules
  </example>
@@ -136,9 +140,8 @@ Seventh,  **Self-Reflection and Correction:** After implementing the solution, I
 </instructions>                  
          
 <end_of_session>
-ALWAYS commit the current job before moving on to the next one.
-When you are done implementing all the jobs, you **MUST** commit and push the changes to the branch.
-IF there is a conflict, you **MUST** resolve it before finishing the session. 
+Before you finish the session, you **MUST** check whether you have committed and pushed the changes to the branch.
+If there is a conflict, you **MUST** resolve it before finishing the session.
 </end_of_session>
          
         """)

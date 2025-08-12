@@ -43,8 +43,8 @@ To prevent conflicts and ensure smooth integration, you must group related user 
 - Stories that are part of the same feature or user workflow should be grouped.
 - Stories with dependencies on each other should be grouped, with the dependency order noted.
 
-Each group will be assigned to a single agent or a coordinated team of agents to ensure code coherence.
-The maximum number of user stories in a group is 3 and the maximum number of groups is 3.
+Each group will be assigned to a single agent or a coordinated team of coding agents to ensure code coherence.
+The maximum number of user stories in a group is 10 and the maximum number of groups is 3. Be sure to group the user stories based on the project context.
 YOU MUST ALWAYS FOLLOW THESE RULES.
 </grouping_logic>
 [**IMPORTANT**]
