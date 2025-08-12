@@ -1,7 +1,7 @@
 import docker
 import os
 from dotenv import load_dotenv
-from docker.errors import ImageNotFound, NotFound
+from docker.errors import ImageNotFound, NotFound, DockerException
 from ..constants.aws_model import AWSModel
 from ..prompts.se_agent_prompts import se_agent_prompts_v1
 import json
@@ -17,20 +17,87 @@ logger = logging.getLogger(__name__)
 
 TIME_OUT = "600"
 
-client = docker.from_env()
-image = None
+# Docker client and image will be initialized lazily
+_client = None
+_image = None
 
-# Construct the absolute path to the docker build context directory
-script_dir = os.path.dirname(os.path.abspath(__file__))
-src_path = os.path.join(script_dir, "..")
+def _get_docker_client():
+    """
+    Get Docker client with proper error handling for Rancher Desktop and other Docker environments.
+    """
+    global _client
+    if _client is None:
+        try:
+            # Try different Docker socket paths for various environments
+            docker_socket_paths = [
+                None,  # Default from environment
+                "unix:///var/run/docker.sock",  # Standard Docker Desktop
+                "unix://~/.docker/run/docker.sock",  # Rancher Desktop (newer versions)
+                "unix://~/.rd/docker.sock",  # Rancher Desktop (older versions)
+            ]
+            
+            for socket_path in docker_socket_paths:
+                try:
+                    if socket_path is None:
+                        _client = docker.from_env()
+                    else:
+                        # Expand user path for socket
+                        if socket_path.startswith("unix://~/"):
+                            expanded_path = socket_path.replace("~/", os.path.expanduser("~/"))
+                            _client = docker.DockerClient(base_url=expanded_path)
+                        else:
+                            _client = docker.DockerClient(base_url=socket_path)
+                    
+                    # Test the connection
+                    _client.ping()
+                    logger.info(f"Successfully connected to Docker using socket: {socket_path or 'default'}")
+                    break
+                    
+                except (DockerException, Exception) as e:
+                    logger.debug(f"Failed to connect using socket {socket_path}: {e}")
+                    _client = None
+                    continue
+            
+            if _client is None:
+                raise DockerException(
+                    "Could not connect to Docker daemon. Please ensure:\n"
+                    "1. Rancher Desktop is running\n"
+                    "2. Docker context is set correctly\n"
+                    "3. Docker socket is accessible\n"
+                    "Try running: docker context ls && docker context use rancher-desktop"
+                )
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker client: {e}")
+            raise DockerException(f"Docker initialization failed: {e}")
+    
+    return _client
 
-try:
-    image = client.images.get("se-agent:latest")
-    print("Image already exists")
-except ImageNotFound:
-    print("Image not found, building...")    
-    image, build_logs = client.images.build(path=src_path, dockerfile="docker/Dockerfile", tag="se-agent:latest")
-    print(f"Image built successfully::: {build_logs}")
+def _get_or_build_image():
+    """
+    Get or build the SE agent Docker image.
+    """
+    global _image
+    if _image is None:
+        client = _get_docker_client()
+        
+        # Construct the absolute path to the docker build context directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        src_path = os.path.join(script_dir, "..")
+        
+        try:
+            _image = client.images.get("se-agent:latest")
+            logger.info("Image 'se-agent:latest' already exists")
+        except ImageNotFound:
+            logger.info("Image not found, building...")    
+            _image, build_logs = client.images.build(
+                path=src_path, 
+                dockerfile="docker/Dockerfile", 
+                tag="se-agent:latest"
+            )
+            logger.info(f"Image built successfully")
+    
+    return _image
 
 def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[str]:
     """
@@ -45,6 +112,9 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[dict]) -> list[st
     Returns:
         list[str]: A list of container IDs.
     """
+    client = _get_docker_client()
+    image = _get_or_build_image()
+    
     container_ids = []
     for job in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
@@ -91,6 +161,8 @@ def _is_container_running(container_ids: list[str]) -> bool:
     """
     if not container_ids:
         return False
+    
+    client = _get_docker_client()
         
     for container_id in container_ids:
         try:
@@ -112,6 +184,7 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
     Returns:
         list[dict]: A list of dictionaries, each containing code and cost.
     """
+    client = _get_docker_client()
     results = []
     for container_id in container_ids:
         try:
@@ -165,6 +238,7 @@ def _remove_containers(container_ids: list[str]) -> None:
     """
     Remove the containers and their associated volumes.
     """
+    client = _get_docker_client()
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
