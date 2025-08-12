@@ -109,7 +109,10 @@ class OverallState(TypedDict):
 config = Config(
     read_timeout=900,
     connect_timeout=120,
-    retries={"max_attempts": 5},
+    retries={
+        "max_attempts": 8,
+        "mode": "adaptive"
+    },
 )
 
 bedrock_client = boto3.client(
