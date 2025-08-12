@@ -7,7 +7,7 @@ fi
 CLEAN_URL="${GIT_URL#http://}"; CLEAN_URL="${CLEAN_URL#https://}"
 AUTH_URL="https://x-access-token:${GITHUB_TOKEN}@${CLEAN_URL}"
 git clone "$AUTH_URL" project
-cd project && git checkout -b "$BRANCH_NAME"
+cd project
 # Configure Git user details
 git config --global user.name "Agentic-Coding-app"
 git config --global user.email "$INSTALLATION_ID+Agentic-Coding-app@users.noreply.github.com"
