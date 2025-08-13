@@ -10,6 +10,9 @@ from botocore.config import Config
 from langchain_core.messages import AnyMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
+from botocore.exceptions import ClientError
+import random
+from ..tools.final_answer_tools import FinalAnswerTool
 from ..prompts import (
     architect_agent_prompts,
     dev_env_init_prompts,
@@ -46,6 +49,70 @@ APPROVED = {
         "backend": {"SQLAlchemy", "JPA", "Axios"},
     },
 }
+
+# Mapping owner/framework to rule files under src/rules
+RULE_FILE_MAP = {
+    "FE": {
+        "React": "react_rules.md",
+    },
+    "BE": {
+        "FastAPI": "fastapi_rules.md",
+        "Node.js": "nodejs_rules.md",
+        "Spring Boot": "spring_boot_rules.md",
+    },
+}
+
+# Language to framework defaults (auto-mapping)
+LANG_TO_FRAMEWORK_DEFAULT = {
+    "Java": "Spring Boot",
+    "Python": "FastAPI",
+    "Javascript": "Node.js",
+}
+
+def _read_rules_file(file_name: str) -> str:
+    """
+    주어진 규칙 파일 이름을 바탕으로 `src/rules/` 디렉토리에서 내용을 읽어
+    문자열로 반환한다. 파일이 없거나 읽기에 실패하면 빈 문자열을 반환하여
+    상위 로직이 안전하게 진행되도록 한다.
+    """
+    try:
+        rules_dir = Path(__file__).resolve().parent.parent / "rules"
+        target = rules_dir / file_name
+        if not target.exists():
+            return ""
+        return target.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+def _build_dev_rules_text(frameworks: list[str], owner: str, languages: list[str] | None = None) -> str:
+    """
+    프레임워크를 규칙 파일에 매핑하여 개발 규칙 텍스트를 구성합니다. 프레임워크가 비어 있거나 소유자에 대해 지정되지 않은 경우, 선언된 언어에서 기본값을 추론합니다.
+    """
+    mapped = RULE_FILE_MAP.get(owner, {})
+    # Normalize frameworks; if not provided, infer from languages via defaults
+    fw_list = [fw for fw in (frameworks or []) if fw]
+    if not fw_list and languages:
+        for lang in languages:
+            default_fw = LANG_TO_FRAMEWORK_DEFAULT.get(lang)
+            if default_fw:
+                fw_list.append(default_fw)
+    # Deduplicate while preserving order
+    seen = set()
+    ordered_fw = []
+    for fw in fw_list:
+        if fw not in seen:
+            seen.add(fw)
+            ordered_fw.append(fw)
+    collected: list[str] = []
+    for fw in ordered_fw:
+        file_name = mapped.get(fw)
+        if not file_name:
+            continue
+        content = _read_rules_file(file_name)
+        if content:
+            header = f"\n# Rules for {owner} - {fw}\n\n"
+            collected.append(header + content.strip() + "\n")
+    return "\n".join(collected).strip()
 
 def parse_section(text: str, section_name: str) -> List[str]:
     """
@@ -89,6 +156,7 @@ class OverallState(TypedDict):
     response: str
     project_name: str
     requirements: List[str]
+    directory_tree: List[str]
     user_scenarios: List[str]
     processes: List[str]
     domain_entities: List[str]
@@ -101,11 +169,11 @@ class OverallState(TypedDict):
     sub_goals: dict[str, list[str]]
     fe_branch_name: str
     be_branch_name: str
-    project_dir: str
-    branch_url: str
+    fe_architect_result: dict[str, Any]
+    be_architect_result: dict[str, Any]
     user_story_groups: list[dict[str, list[str] | str]]
     agent_results: list[dict]
-    
+
 config = Config(
     read_timeout=900,
     connect_timeout=120,
@@ -129,6 +197,34 @@ llm = ChatBedrockConverse(
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
+async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.5, **kwargs):
+    """
+    지수 백오프(+지터)로 비동기 함수를 재시도하는 헬퍼.
+    주로 AWS/네트워크 스로틀링(Throttling/TooManyRequests) 계열 오류에 한 번 더
+    기회를 주기 위해 사용한다. 지정 횟수만큼 시도하며, 마지막에 한 번 더 최종 실행한다.
+    """
+    for attempt in range(max_retries):
+        try:
+            return await func(*args, **kwargs)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            msg = str(e)
+            if "Throttling" in code or "TooManyRequests" in code or "Rate exceeded" in msg:
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 0.3)
+                await asyncio.sleep(delay)
+                continue
+            raise
+        except Exception as e:
+            # Some SDKs surface throttling as generic errors with message only
+            txt = str(e)
+            if any(x in txt for x in ["Throttling", "TooManyRequests", "Rate exceeded"]):
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 0.3)
+                await asyncio.sleep(delay)
+                continue
+            raise
+    # Final try
+    return await func(*args, **kwargs)
+
 req_def_chain = req_def_prompts.prompt | llm | JsonOutputParser()
 dev_env_init_chain = dev_env_init_prompts.prompt | llm
 dev_planning_chain = dev_planning_prompts_v2.prompt | llm | JsonOutputParser()
@@ -136,7 +232,7 @@ role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
 
 architect_agent = create_architect_agent(
     model=llm,
-    tools=[ExecuteShellCommandTool()],
+    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
     prompt=architect_agent_prompts.prompt,
     name="architect_agent"
 )
@@ -278,7 +374,8 @@ async def dev_planning(state: OverallState):
     return {
         "messages": [AIMessage(content=json.dumps(parsed))],
         "main_goals": parsed.get("main_goals", []),
-        "sub_goals": parsed.get("sub_goals", {})
+        "sub_goals": parsed.get("sub_goals", {}),
+        "directory_tree": parsed.get("directory_tree", [])
     }
 
 async def architect(state: OverallState):
@@ -298,11 +395,10 @@ async def architect(state: OverallState):
     """
     start_time = time.perf_counter()
     print("작업을 시작합니다...")
-
+    print(state.get("directory_tree", []))
     main_goals = state.get("main_goals", [])
     sub_goals_plan = state.get("sub_goals", {})
-    # project_name = state.get("project_name", "sample-project")
-    project_name = "sample-project"
+    project_name = state.get("project_name", "sample-project")
 
     # Main Goals 맵 생성
     main_goals_map = {goal['id']: goal for goal in main_goals}
@@ -320,7 +416,7 @@ async def architect(state: OverallState):
 
         for sub_goal in sub_goal_list:
             owner = sub_goal.get("owner")
-            print(owner)
+
             if owner in plan_builders:
                 builder = plan_builders[owner]
                 # main_goal 객체를 딕셔너리에 저장하여 자동으로 중복 제거
@@ -341,50 +437,94 @@ async def architect(state: OverallState):
                 # sub_goal 추가
                 builder["sub_goals"][goal_id].append(filtered_sub_goal)
 
-    coroutines = []
-    running_tasks = []
+    def _slugify_branch_base(name: str) -> str:
+        lower = name.strip().lower()
+        result_chars = []
+        prev_hyphen = False
+        for ch in lower:
+            if ch.isalnum():
+                result_chars.append(ch)
+                prev_hyphen = False
+            else:
+                if not prev_hyphen:
+                    result_chars.append('-')
+                    prev_hyphen = True
+        s = ''.join(result_chars).strip('-')
+        while '--' in s:
+            s = s.replace('--', '-')
+        return s
+
+    tasks = []
     fe_branch_name = ""
     be_branch_name = ""
+    fe_architect_result = {}
+    be_architect_result = {}
     # 각 Owner(FE, BE)에 대해 실행할 작업을 생성
     for owner, builder in plan_builders.items():
         if not builder["sub_goals"]:
             continue # 해당 owner에 대한 작업이 없으면 건너뛰기
-        print(builder["sub_goals"])
 
-        if running_tasks:
-            # 0.5초의 시간차를 둡니다.
-            await asyncio.sleep(0.5)
-        branch_name = f"{project_name}_{owner}"
+        base = _slugify_branch_base(project_name)
+        branch_name = f"{base}_{owner}"
+
         if owner == "FE":
             fe_branch_name = branch_name
         else:
             be_branch_name = branch_name
 
+        dev_rules_text = _build_dev_rules_text(
+            state.get("framework", []),
+            owner,
+            languages=state.get("language", [])
+        )
+
         plan = {
             "project_name": project_name,
             "branch_name": branch_name,
             "main_goals": list(builder["main_goals_map"].values()),
-            "sub_goals": builder["sub_goals"]
+            "sub_goals": builder["sub_goals"],
+            "directory_tree": state.get("directory_tree", []),
+            "git_url": state.get("base_url", ""),
+            "owner": owner,
+            "dev_rules": dev_rules_text,
         }
 
-        task = asyncio.create_task(
-            architect_agent.ainvoke(
-                plan,
-                config={"recursion_limit": 100}
-            )
+        # # Owner별 프롬프트 선택 (FE/BE)
+        # owner_prompt = _select_architect_prompt_by_owner(owner)
+        # owner_architect_agent = create_architect_agent(
+        #     model=llm,
+        #     tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
+        #     prompt=owner_prompt,
+        #     name=f"architect_agent_{owner.lower()}"
+        # )
+
+        task = _retry_async(
+            architect_agent.ainvoke,
+            plan,
+            config={"recursion_limit": 100},
+            max_retries=7,
+            base_delay=0.6,
         )
 
-        running_tasks.append(task)
+        tasks.append(task)
 
-    if running_tasks:
-        results = await asyncio.gather(*running_tasks)
+    results = []
+    if tasks:
+        results = await asyncio.gather(*tasks)
 
+    merged_messages = []
     for result in results:
+        msgs = result.get("messages", []) if isinstance(result, dict) else []
+        if isinstance(msgs, list):
+            merged_messages.extend(msgs)
+
         res = result['architect_result']
         if res.owner == "FE":
             fe_branch_name = res.main_branch
+            fe_architect_result = res.architect_result
         else:
             be_branch_name = res.main_branch
+            be_architect_result = res.architect_result
 
     end_time = time.perf_counter()
     print("작업이 끝났습니다!")
@@ -394,15 +534,12 @@ async def architect(state: OverallState):
 
     print(f"\n작업에 총 {elapsed_time:.4f}초가 걸렸습니다.")
 
-
     return {
-        "messages": results[0]['messages'],
+        "messages": merged_messages,
         "fe_branch_name": fe_branch_name,
-        "be_branch_name": be_branch_name
-        # "project_dir": result['architect_result'].project_dir,
-        # "branch_name": result['architect_result'].main_branch,
-        # "base_url": result['architect_result'].base_url,
-        # "branch_url": result['architect_result'].branch_url
+        "be_branch_name": be_branch_name,
+        "fe_architect_result": fe_architect_result,
+        "be_architect_result": be_architect_result
     }
 
 
@@ -448,7 +585,7 @@ async def spawn_engineers(state: OverallState):
         state (RoleAllocateState): The state containing allocated sub-goals.
 
     Returns:
-        agent_results: list[dict]: A list of dictionaries, each containing container_id, code, cost_usd, error, and log.        
+        agent_results: list[dict]: A list of dictionaries, each containing container_id, code, cost_usd, error, and log.
         For example:
             [
                 {
@@ -504,7 +641,7 @@ async def resolver(state: OverallState):
 
     result = await resolver_agent.ainvoke(
         {
-            'project_dir': state['project_dir'],
+            'project_dir': state['branch_name'],
             'base_branch': state['branch_name']
         },
         config={"recursion_limit": 100}
@@ -532,11 +669,11 @@ graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
 graph_builder.add_edge("dev_planning", "architect")
 graph_builder.add_edge("architect", END)
-graph_builder.add_edge("dev_planning", "architect")
-graph_builder.add_edge("architect", "role_allocate")
-graph_builder.add_edge("role_allocate", "spawn_engineers")
-graph_builder.add_edge("spawn_engineers", "resolver")
-graph_builder.add_edge("resolver", END)
+# graph_builder.add_edge("dev_planning", "architect")
+# graph_builder.add_edge("architect", "role_allocate")
+# graph_builder.add_edge("role_allocate", "spawn_engineers")
+# graph_builder.add_edge("spawn_engineers", "resolver")
+# graph_builder.add_edge("resolver", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"
