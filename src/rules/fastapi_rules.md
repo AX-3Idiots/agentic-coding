@@ -1,0 +1,214 @@
+# FastAPI Development Rules and Best Practices
+
+This document defines the conventions and best practices for developing production-ready FastAPI applications.
+Following these rules will ensure that code is **maintainable, scalable, and secure**.
+
+---
+
+## 1. Project Structure
+
+A clear and consistent project structure makes the application easier to maintain and scale.
+
+**1.1 Directory Layout (Recommended)**
+
+```
+app/
+├── main.py                 # Application entry point
+├── api/                    # API routes
+│   ├── v1/                 
+│   │   ├── routes/         # Route definitions
+│   │   │   ├── user.py
+│   │   │   └── order.py
+│   │   └── dependencies.py # Shared dependencies
+├── core/                   # Core configuration and utilities
+│   ├── config.py           # App settings (Pydantic BaseSettings)
+│   └── security.py         # Auth & security helpers
+├── models/                 # SQLAlchemy models
+│   ├── user.py
+│   └── order.py
+├── schemas/                # Pydantic models for request/response
+│   ├── user.py
+│   └── order.py
+├── services/               # Business logic layer
+│   ├── user_service.py
+│   └── order_service.py
+└── tests/                  # Unit and integration tests
+    ├── test_user.py
+    └── test_order.py
+```
+
+**1.2 Naming Conventions**
+
+* **Packages & Modules:** lowercase with underscores (e.g., `user_service.py`).
+* **Classes:** PascalCase (e.g., `UserService`).
+* **Variables & Functions:** snake\_case (e.g., `get_user_by_id`).
+
+**1.3 Entry Point**
+
+* Keep `main.py` as the only file that creates the `FastAPI()` instance.
+* Use `@app.on_event("startup")` and `@app.on_event("shutdown")` for initialization and cleanup tasks.
+
+---
+
+## 2. Dependency Management
+
+* Use **Poetry** or `pip-tools` for dependency pinning.
+* Always separate runtime dependencies from development dependencies (`dev` extras for testing/linting tools).
+* Common dependencies:
+
+  * `fastapi` (web framework)
+  * `uvicorn` (ASGI server)
+  * `sqlalchemy` & `alembic` (ORM & migrations)
+  * `pydantic` (data validation)
+  * `pytest` (testing)
+  * `python-dotenv` (environment variables)
+
+---
+
+## 3. Configuration
+
+**3.1 Use Environment Variables**
+
+* Store configuration in `.env` files (never commit to VCS).
+* Use `pydantic.BaseSettings` for type-safe config loading.
+
+Example:
+
+```python
+from pydantic import BaseSettings
+
+class Settings(BaseSettings):
+    database_url: str
+    secret_key: str
+    debug: bool = False
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+**3.2 Environment Separation**
+
+* `.env.dev` for development
+* `.env.prod` for production
+
+---
+
+## 4. API Design
+
+**4.1 Route Organization**
+
+* Group routes by feature inside `api/v1/routes`.
+* Use API versioning (e.g., `/api/v1/users`).
+
+**4.2 Pydantic Schemas**
+
+* Separate request & response models.
+* Include `Config.orm_mode = True` for SQLAlchemy integration.
+
+**4.3 Dependency Injection**
+
+* Use `Depends()` for shared logic (e.g., authentication, DB session).
+
+Example:
+
+```python
+from fastapi import Depends
+
+@app.get("/users/me")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+```
+
+---
+
+## 5. Error Handling
+
+**5.1 Global Exception Handlers**
+
+* Implement centralized exception handlers using `@app.exception_handler`.
+
+Example:
+
+```python
+from fastapi.responses import JSONResponse
+from fastapi import Request
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"}
+    )
+```
+
+**5.2 Custom Exceptions**
+
+* Create custom exception classes for business logic errors.
+
+---
+
+## 6. Logging
+
+* Use Python’s built-in `logging` module or `loguru` for structured logging.
+* Log in JSON for production to integrate with monitoring tools.
+* Configure log level by environment:
+
+  * Development: `DEBUG`
+  * Production: `INFO` or higher
+
+---
+
+## 7. Testing
+
+**7.1 Test Strategy**
+
+* **Unit tests** for services and utilities.
+* **Integration tests** for DB/API flows.
+* **End-to-end tests** for full workflows.
+
+**7.2 Tools**
+
+* Use `pytest` with `httpx.AsyncClient` for async API tests.
+
+Example:
+
+```python
+import pytest
+from httpx import AsyncClient
+
+@pytest.mark.asyncio
+async def test_read_main(async_client: AsyncClient):
+    response = await async_client.get("/")
+    assert response.status_code == 200
+```
+
+---
+
+## 8. Security
+
+* Use **OAuth2 with JWT** for authentication.
+* Always hash passwords with `passlib`.
+* Sanitize all inputs to prevent SQL injection (use ORM/parameterized queries).
+* Configure CORS by environment:
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://myapp.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+---
+
+## 9. Performance & Monitoring
+
+* Use `prometheus_fastapi_instrumentator` for metrics.
+* Implement `/health` endpoint for readiness/liveness checks.
+* Consider using `async` for I/O-bound tasks and `BackgroundTasks` for non-blocking jobs.
