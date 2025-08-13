@@ -15,7 +15,7 @@ load_dotenv()
 setup_logging()
 logger = logging.getLogger(__name__)
 
-TIME_OUT = "600"
+TIME_OUT = "1000"
 
 # Docker client and image will be initialized lazily
 _client = None
@@ -130,7 +130,7 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
         volume = client.volumes.create(name=volume_name)
         container = client.containers.run(
             image,            
-            mem_limit="4g",
+            mem_limit="8g",
             cpu_quota=200000,
             cpu_period=100000,
             network_mode="host",
@@ -198,7 +198,7 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
             container = client.containers.get(container_id)
             
             # Wait for the container to finish, with a timeout
-            container.wait(timeout=660) # Slightly more than the internal timeout
+            container.wait(timeout=1060) # Slightly more than the internal timeout
 
             # Get logs
             logs = container.logs().decode('utf-8').strip().split('\n')

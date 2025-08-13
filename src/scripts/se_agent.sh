@@ -25,8 +25,7 @@ trap 'rm -f "$output_log"' EXIT # Clean up on exit
 if ! timeout "$TIME_OUT" claude --verbose -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json 2>"$output_log"; then
     echo "Error: The 'claude' command failed." >&2
     echo "--- Full output ---" >&2
-    cat "$output_log" >&2
-    jq -n --arg error_msg "$(cat "$output_log")" '{code: null, cost_usd: null, error: $error_msg}'
+    cat "$output_log"
     exit 1
 fi
 
