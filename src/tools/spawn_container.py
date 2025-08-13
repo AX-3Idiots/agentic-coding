@@ -138,7 +138,7 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
             environment={
                 "GIT_URL": git_url,
                 "AWS_REGION": os.environ["AWS_DEFAULT_REGION"],
-                "CLAUDE_CODE_USE_BEDROCK": "1",
+                "CLAUDE_CODE_USE_BEDROCK": 1,
                 "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION.value,
                 "SYSTEM_PROMPT": system_prompt,
                 "USER_INPUT": user_input,
@@ -148,6 +148,8 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
                 "JOB_NAME": job.get("group_name"),
                 "INSTALLATION_ID": os.environ.get("INSTALLATION_ID"),
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": 4096,
+                "MAX_THINKING_TOKENS": 1024
             },
             volumes={volume.name: {"bind": "/app", "mode": "rw"}},
         )
@@ -200,7 +202,7 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
 
             # Get logs
             logs = container.logs().decode('utf-8').strip().split('\n')
-            print(f"Logs for {container_id}:\n{logs}")
+            logger.info(f"results for {container_id}:\n{logs}")
             # The last line should be our JSON result
             last_line = logs[-1] if logs else ''            
             result_data = {}
@@ -208,9 +210,9 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
                 # Parse the JSON from the last line
                 result_data = json.loads(last_line)
             except json.JSONDecodeError:
-                print(f"Warning: Could not decode JSON from logs of container {container_id}")
-                print(f"Full logs for {container_id}:\n{logs}")
-                result_data = {'code': None, 'cost_usd': None, 'error': 'Failed to parse result.'}
+                logger.warning(f"Warning: Could not decode JSON from logs of container {container_id}")
+                logger.warning(f"Full logs for {container_id}:\n{logs}")
+                result_data = {'code': None, 'cost_usd': None, 'error': f"Failed to parse result. Full logs: {logs}"}
 
             results.append({
                 'container_id': container_id,
@@ -247,30 +249,39 @@ def _remove_containers(container_ids: list[str]) -> None:
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
-            
+            logging.info(f"Removing container {container.name} ({container.id})")
+
             # Get volume names from the container's attributes before removing it
-            mounts = container.attrs.get('Mounts', [])
+            mounts = container.attrs.get("Mounts", [])
             volume_names = []
             for mount in mounts:
-                if mount.get('Type') == 'volume':
-                    volume_name = mount.get('Name')
+                if mount.get("Type") == "volume":
+                    volume_name = mount.get("Name")
                     if volume_name:
                         volume_names.append(volume_name)
 
-            # Stop and remove the container first to release the volume
-            container.remove(force=True)
+            # Stop and remove the container, and its anonymous volumes
+            container.remove(force=True, v=True)
+            logging.info(f"Successfully removed container {container.name}")
 
-            # Now that the container is gone, remove its volumes
+            # Now that the container is gone, remove its named volumes
+            if volume_names:
+                logging.info(f"Removing named volumes for {container.name}: {volume_names}")
             for volume_name in volume_names:
                 try:
                     volume = client.volumes.get(volume_name)
                     volume.remove(force=True)
+                    logging.info(f"Successfully removed volume {volume_name}")
                 except NotFound:
-                    # This can happen if the volume was manually removed or never created properly
+                    logging.warning(f"Volume {volume_name} not found, skipping.")
                     continue
+                except Exception as e:
+                    logging.error(f"Error removing volume {volume_name}: {e}")
         except NotFound:
-            # This can happen if the container was already removed
+            logging.warning(f"Container {container_id} not found, skipping.")
             continue
+        except Exception as e:
+            logging.error(f"Error removing container {container_id}: {e}")
 
 def spawn_engineers(git_url: str, branch_names: dict[str, str], jobs: list[dict]) -> list[dict]:
     """
