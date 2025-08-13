@@ -16,23 +16,17 @@ git config --global user.email "$INSTALLATION_ID+Agentic-Coding-app@users.norepl
 git remote set-url origin "$AUTH_URL"
 
 echo "Running Claude-Code..."
-error_log=$(mktemp)
-trap 'rm -f "$error_log"' EXIT # Clean up on exit
 
-# Run the claude command and check its exit status
-if ! result=$(timeout "$TIME_OUT" claude -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json 2> "$error_log"); then
-    error_content=$(cat "$error_log")
+# Create a temporary file to store the output with .log extension
+output_log=$(mktemp)
+trap 'rm -f "$output_log"' EXIT # Clean up on exit
+
+# Run the claude command and capture combined output, then check exit status
+if ! timeout "$TIME_OUT" claude --verbose -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json 2>"$output_log"; then
     echo "Error: The 'claude' command failed." >&2
-    echo "--- Stderr ---" >&2
-    echo "$error_content" >&2
-
-    if [[ -n "$result" ]]; then
-        echo "--- Stdout ---" >&2
-        echo "$result" >&2
-    fi
-
-    full_error_message="Stderr: $error_content\nStdout: $result"
-    jq -n --arg error "$full_error_message" '{code: null, cost_usd: null, error: $error}'
+    echo "--- Full output ---" >&2
+    cat "$output_log" >&2
+    jq -n --arg error_msg "$(cat "$output_log")" '{code: null, cost_usd: null, error: $error_msg}'
     exit 1
 fi
 
@@ -54,4 +48,4 @@ if [[ "$files_count" == "1" ]]; then
 fi
 
 # Print the final summarized result via jq only
-printf '%s\n' "$result" | jq -c '{code: .result, cost_usd: .total_cost_usd}'
+jq -c '{code: .result, cost_usd: .total_cost_usd}' "$output_log"
