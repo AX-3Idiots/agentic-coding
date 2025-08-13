@@ -148,7 +148,7 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
                 "JOB_NAME": job.get("group_name"),
                 "INSTALLATION_ID": os.environ.get("INSTALLATION_ID"),
-                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": 6144,
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": 9136,
                 "MAX_THINKING_TOKENS": 1024
             },
             volumes={volume.name: {"bind": "/app", "mode": "rw"}},
