@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from .logging_config import setup_logging
 from dotenv import load_dotenv
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
 from .callbacks.logging_callback_handler import LoggingCallbackHandler
 from .core.config import git_config
 import logging
+import json
 
 setup_logging()
 load_dotenv()
@@ -38,3 +39,53 @@ async def read_root(request: Request):
             },
     )
     return {"response": response}
+
+@app.post("/stream-workflow")
+async def stream_workflow(request: Request):
+    async def ndjson_stream():
+        # Send an initial line to flush headers and open the stream on clients
+        yield (json.dumps({"status": "starting"}, ensure_ascii=False) + "\n").encode("utf-8")
+
+        inputs = {
+            "messages": [HumanMessage(content=request.input)],
+            "base_url": request.git_url,
+        }
+        cfg = {"callbacks": [callback_handler]}
+
+        # Choose the best available stream API, but iterate with one unified loop
+        events_iter = (
+            graph.astream_events(inputs, config=cfg, version="v1")
+            if getattr(graph, "astream_events", None)
+            else graph.astream_log(inputs, config=cfg)
+        )
+
+        async for event in events_iter:
+            try:
+                if isinstance(event, (bytes, bytearray)):
+                    text = event.decode("utf-8", errors="ignore")
+                    try:
+                        obj = json.loads(text)
+                    except Exception:
+                        obj = {"message": text}
+                elif isinstance(event, (dict, list)):
+                    obj = event
+                else:
+                    text = str(event)
+                    try:
+                        obj = json.loads(text)
+                    except Exception:
+                        obj = {"message": text}
+                yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+            except Exception:
+                continue
+
+    return StreamingResponse(
+        ndjson_stream(),
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
