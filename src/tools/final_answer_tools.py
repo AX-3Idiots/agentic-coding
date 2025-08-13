@@ -1,0 +1,51 @@
+from typing import Any, Dict, Optional, Type
+from pydantic import BaseModel, Field
+from langchain_core.tools import BaseTool
+import json
+
+
+class FinalAnswerInput(BaseModel):
+    """Input schema for the final_answer tool matching the prompt contract."""
+
+    owner: Optional[str] = Field(default=None, description="Project owner such as 'FE' or 'BE'.")
+    branch_name: Optional[str] = Field(default=None, description="Name of the branch created for this work.")
+    architect_result: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Structured execution summary (created files/dirs, notes, etc.).",
+    )
+
+
+class FinalAnswerTool(BaseTool):
+    """
+    A no-op aggregation tool that captures the architect agent's final structured
+    answer and returns it verbatim for downstream parsing.
+    """
+
+    name: str = "final_answer"
+    description: str = (
+        "Collect the final structured result for the architect agent. "
+        "Pass through the provided fields so the workflow can persist and use them."
+    )
+    args_schema: Type[BaseModel] = FinalAnswerInput
+
+    def _run(
+        self,
+        owner: Optional[str] = None,
+        branch_name: Optional[str] = None,
+        architect_result: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        payload = {
+            "tool_name": self.name,
+            "tool_code": {
+                # Always include provided fields; omit Nones for cleanliness
+                **({"owner": owner} if owner is not None else {}),
+                **({"branch_name": branch_name} if branch_name is not None else {}),
+                **({"architect_result": architect_result} if architect_result is not None else {}),
+            },
+        }
+        # Return as JSON string so downstream regex/json parsing can consume it
+        return json.dumps(payload)
+
+    async def _arun(self, *args, **kwargs) -> str:  # pragma: no cover - sync path is primary
+        return self._run(*args, **kwargs)
+
