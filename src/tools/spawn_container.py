@@ -119,13 +119,10 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
     for job in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
         user_input = json.dumps(job)
-        system_prompt = se_agent_prompts_v1.prompt.invoke({
-            "language": "Javascript", 
-            "framework": "React", 
-            "library": "Any",
-            "fe_branch_name": branch_names.get("fe_branch_name"),
-            "be_branch_name": branch_names.get("be_branch_name")
-        }).messages[0].content
+        system_prompt = se_agent_prompts_v1.prompt.format(
+            fe_branch_name=branch_names.get("fe_branch_name"),
+            be_branch_name=branch_names.get("be_branch_name")
+        )
         
         volume = client.volumes.create(name=volume_name)
         container = client.containers.run(

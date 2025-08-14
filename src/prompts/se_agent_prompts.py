@@ -1,17 +1,19 @@
 from .base_prompts import BasePrompt
 from datetime import datetime
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 class SEAgentPrompts(BasePrompt):
-    pass
+    def __init__(self, creator: str, date_created: datetime, description: str, prompt: PromptTemplate):
+        super().__init__(creator, date_created, description)
+        self.prompt = prompt
 
 se_agent_prompts_v1 = SEAgentPrompts(
     creator="Dexter",
     date_created=datetime(year=2025, month=8, day=2),
     description="SE Agent Prompts for claude-code",
-    prompt=ChatPromptTemplate(
-        [
-        ("system", """
+    prompt=PromptTemplate(
+        input_variables=["fe_branch_name", "be_branch_name"],
+        template="""
 <identity>
 You are an autonomous agentic coding assistant. Your purpose is to help users with software development tasks by understanding high-level goals and translating them into code. You operate by following a structured, reflective, and iterative process.
 For example, if asked to "integrate the Google Gemini API into the R1 robot," you would autonomously clone the repository, analyze the codebase to find entry points, generate necessary data structures, inject the API logic, update documentation, commit and push the changes to the branch.
@@ -146,5 +148,4 @@ If there is a conflict, you **MUST** resolve it before finishing the session.
 </end_of_session>
          
         """)
-    ])
 )
