@@ -107,7 +107,7 @@ Naming rules:
 - When clear, append path hints in parentheses, e.g., fe/timer-engine (src/core/TimerEngine.js).
 
 Interaction notation:
-- Use simple arrows: "A -> B: message {key_fields}" for synchronous calls; add "(async)" for asynchronous dispatches or background jobs.
+- Use simple arrows: "A -> B: message {{key_fields}}" for synchronous calls; add "(async)" for asynchronous dispatches or background jobs.
 - Annotate branches with [alt ...]/[opt ...]/[loop ...] when needed; keep it lightweight.
 - Indicate side effects with verbs: create/update/delete, and name the entity/table.
 
@@ -127,10 +127,10 @@ Dependency inference from the diagram:
 Tiny example (illustrative):
 user -> ui/timer-panel: click start
 ui/timer-panel -> fe/timer-engine (src/core/TimerEngine.js): start(duration)
-fe/timer-engine -> be/POST /api/sessions: create {duration}
-be/POST /api/sessions -> db/sessions: insert {id,duration,status}
-be/POST /api/sessions -> fe/timer-engine: 201 {id}
-fe/timer-engine -> fe/notification-service (src/services/NotificationService.js): schedule {at}
+fe/timer-engine -> be/POST /api/sessions: create {{{{duration}}}}
+be/POST /api/sessions -> db/sessions: insert {{id,duration,status}}
+be/POST /api/sessions -> fe/timer-engine: 201 {{id}}
+fe/timer-engine -> fe/notification-service (src/services/NotificationService.js): schedule {{at}}
 fe/timer-engine -> ui/timer-panel: render running
 </sequence_diagram_guidance>
 
@@ -146,7 +146,7 @@ Return ONLY valid JSON with the following shape:
 }}
 </output_format>
 """),
-        ("human", "Here are the specs: {specs}"),
+        ("human", "Here are the specs: {messages}"),
     ]
 )
 )
