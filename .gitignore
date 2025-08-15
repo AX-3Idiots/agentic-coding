@@ -29,5 +29,4 @@ logs
 .*.sw?
 .cache
 .env
-test
 .DS_Store
