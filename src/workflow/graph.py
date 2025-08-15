@@ -156,6 +156,36 @@ resolver_agent = create_resolver_agent(
 
 async def solution_owner(state: OverallState, config: RunnableConfig):
     """Acts as the solution owner to validate the development plan.
+
+    Args:
+        state (OverallState): The state containing the 'messages' and 'base_url'.
+
+    Returns:
+        OverallState: An updated state dictionary with the solution owner's
+            response message.
+            Note: The return statement is currently commented out.
+    
+        Example:
+            state = {
+                "messages": [HumanMessage(content="What is the main goal of the project?")],
+                "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git",
+                "fe_spec": [
+                    {
+                    "title": "로그인 화면", "description": "아이디와 비밀번호를 입력하는 로그인 화면입니다. '아이디' 입력 필드(필수)와 '비밀번호' 입력 필드(필수, 입력 내용 숨김 처리)가 각각 존재합니다. 사용자가 정보를 입력하고 '로그인' 버튼을 클릭하면 서버로 로그인 요청을 보냅니다."
+                    },
+                    {
+                    "title": "사용자 대시보드 화면", "description": "로그인 성공 후 진입하는 메인 대시보드 화면입니다. API로부터 받은 사용자 정보를 활용하여 'OOO님, 환영합니다!' 형태의 환영 메시지와 사용자의 이메일 주소를 보여줍니다. 추가로, 사용자가 로그아웃할 수 있는 '로그아웃' 버튼이 있으며 이 버튼을 누르면 로그인 화면으로 이동합니다."
+                    }
+                ],
+                "be_spec": [
+                    {
+                    "endpoint": "POST /auth/login", "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{ \"accessToken\": \"JWT_TOKEN_STRING\" }` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{ \"error\": \"Invalid credentials\" }` 메시지를 반환합니다."
+                    },
+                    {
+                    "endpoint": "GET /users/me","description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
+                    }
+                ]
+            }            
     """
     result = await solution_owner_agent.ainvoke({
         'messages': state['messages'],
@@ -178,36 +208,16 @@ async def architect(state: OverallState):
         ArchitectState: An updated state dictionary with the architect's
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
-    """
-    fe_spec_template = [
-        {
-        "title": "로그인 화면",
-        "description": "아이디와 비밀번호를 입력하는 로그인 화면입니다. '아이디' 입력 필드(필수)와 '비밀번호' 입력 필드(필수, 입력 내용 숨김 처리)가 각각 존재합니다. 사용자가 정보를 입력하고 '로그인' 버튼을 클릭하면 서버로 로그인 요청을 보냅니다."
-        },
-        {
-        "title": "사용자 대시보드 화면",
-        "description": "로그인 성공 후 진입하는 메인 대시보드 화면입니다. API로부터 받은 사용자 정보를 활용하여 'OOO님, 환영합니다!' 형태의 환영 메시지와 사용자의 이메일 주소를 보여줍니다. 추가로, 사용자가 로그아웃할 수 있는 '로그아웃' 버튼이 있으며 이 버튼을 누르면 로그인 화면으로 이동합니다."
-        }
-    ],
-    be_spec_template = [
-        {
-        "endpoint": "POST /auth/login",
-        "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{ \"accessToken\": \"JWT_TOKEN_STRING\" }` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{ \"error\": \"Invalid credentials\" }` 메시지를 반환합니다."
-        },
-        {
-        "endpoint": "GET /users/me",
-        "description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
-        }
-    ]
-    fe_spec = state.get("fe_spec", fe_spec_template)
-    be_spec = state.get("be_spec", be_spec_template)
+    """    
+    fe_spec = state.get("fe_spec", None)
+    be_spec = state.get("be_spec", None)
 
-    specs_to_process = []
-    if fe_spec:
-        specs_to_process.append(("FE", fe_spec))
-    if be_spec:
-        specs_to_process.append(("BE", be_spec))
+    if fe_spec is None or be_spec is None:
+        return {
+            "messages": [AIMessage(content="Something went wrong. Please try again.")]
+        }
 
+    specs_to_process = [("FE", fe_spec), ("BE", be_spec)]
     tasks = []
     for owner, spec in specs_to_process:
         # 에이전트에 전달할 payload 구성
