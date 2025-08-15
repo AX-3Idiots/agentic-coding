@@ -178,71 +178,41 @@ async def architect(state: OverallState):
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
-    def _read_rules_file(file_name: str) -> str:
-        """
-        주어진 규칙 파일 이름을 바탕으로 `src/rules/` 디렉토리에서 내용을 읽어
-        문자열로 반환한다. 파일이 없거나 읽기에 실패하면 빈 문자열을 반환하여
-        상위 로직이 안전하게 진행되도록 한다.
-        """
-        try:
-            rules_dir = Path(__file__).resolve().parent.parent / "rules"
-            target = rules_dir / file_name
-            if not target.exists():
-                return ""
-            return target.read_text(encoding="utf-8")
-        except Exception:
-            return ""
-
-    def _build_dev_rules_text(owner: str) -> str:
-        """
-        고정된 기술 스택(FE: React, BE: FastAPI)에 따라 owner에 맞는 개발 규칙을 반환합니다.
-        """
-        file_name = ""
-        framework = ""
-        if owner == "FE":
-            file_name = "react_rules.md"
-            framework = "React"
-        elif owner == "BE":
-            file_name = "fastapi_rules.md"
-            framework = "FastAPI"
-        else:
-            return ""
-
-        content = _read_rules_file(file_name)
-        if content:
-            header = f"\n# Rules for {owner} - {framework}\n\n"
-            return header + content.strip() + "\n"
-        return ""
-
-    start_time = time.perf_counter()
-    print("작업을 시작합니다...")
-
-    fe_spec = state.get("fe_spec")
-    be_spec = state.get("be_spec")
+    fe_spec_template = [
+        {
+        "title": "로그인 화면",
+        "description": "아이디와 비밀번호를 입력하는 로그인 화면입니다. '아이디' 입력 필드(필수)와 '비밀번호' 입력 필드(필수, 입력 내용 숨김 처리)가 각각 존재합니다. 사용자가 정보를 입력하고 '로그인' 버튼을 클릭하면 서버로 로그인 요청을 보냅니다."
+        },
+        {
+        "title": "사용자 대시보드 화면",
+        "description": "로그인 성공 후 진입하는 메인 대시보드 화면입니다. API로부터 받은 사용자 정보를 활용하여 'OOO님, 환영합니다!' 형태의 환영 메시지와 사용자의 이메일 주소를 보여줍니다. 추가로, 사용자가 로그아웃할 수 있는 '로그아웃' 버튼이 있으며 이 버튼을 누르면 로그인 화면으로 이동합니다."
+        }
+    ],
+    be_spec_template = [
+        {
+        "endpoint": "POST /auth/login",
+        "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{ \"accessToken\": \"JWT_TOKEN_STRING\" }` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{ \"error\": \"Invalid credentials\" }` 메시지를 반환합니다."
+        },
+        {
+        "endpoint": "GET /users/me",
+        "description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
+        }
+    ]
+    fe_spec = state.get("fe_spec", fe_spec_template)
+    be_spec = state.get("be_spec", be_spec_template)
 
     specs_to_process = []
-    if fe_spec and isinstance(fe_spec, dict):
+    if fe_spec:
         specs_to_process.append(("FE", fe_spec))
-    if be_spec and isinstance(be_spec, dict):
+    if be_spec:
         specs_to_process.append(("BE", be_spec))
 
     tasks = []
-    fe_branch_name = ""
-    be_branch_name = ""
-    fe_architect_result = {}
-    be_architect_result = {}
-
     for owner, spec in specs_to_process:
-        if not spec.get("sub_goals"):
-            continue
-
-        dev_rules_text = _build_dev_rules_text(owner)
-
         # 에이전트에 전달할 payload 구성
         payload = {
             "messages": state.get("messages", []),
             "spec": spec,
-            "dev_rules": dev_rules_text,
             "git_url": state.get("base_url", ""),
             "owner": owner,
         }
@@ -265,34 +235,14 @@ async def architect(state: OverallState):
     if tasks:
         results = await asyncio.gather(*tasks)
 
-    merged_messages = []
+    latest_messages = []
     for result in results:
         msgs = result.get("messages", []) if isinstance(result, dict) else []
-        if isinstance(msgs, list):
-            merged_messages.extend(msgs)
-
-        res = result['architect_result']
-        if res.owner == "FE":
-            fe_branch_name = res.main_branch
-            fe_architect_result = res.architect_result
-        else:
-            be_branch_name = res.main_branch
-            be_architect_result = res.architect_result
-
-    end_time = time.perf_counter()
-    print("작업이 끝났습니다!")
-
-    # 경과 시간 계산 (종료 시간 - 시작 시간)
-    elapsed_time = end_time - start_time
-
-    print(f"\n작업에 총 {elapsed_time:.4f}초가 걸렸습니다.")
-
+        if isinstance(msgs, list) and msgs:
+            latest_messages.append(msgs[-1])
+            print(latest_messages)
     return {
-        "messages": merged_messages,
-        "fe_branch_name": fe_branch_name,
-        "be_branch_name": be_branch_name,
-        "fe_architect_result": fe_architect_result,
-        "be_architect_result": be_architect_result
+        "messages": latest_messages
     }
 
 
@@ -414,8 +364,8 @@ graph_builder.add_node("role_allocate", role_allocate)
 graph_builder.add_node("spawn_engineers", spawn_engineers)
 graph_builder.add_node("resolver", resolver)
 
-graph_builder.add_edge(START, "solution_owner")
-graph_builder.add_edge("solution_owner", END)
+graph_builder.add_edge(START, "architect")
+graph_builder.add_edge("architect", END)
 # graph_builder.add_edge("architect", END)
 # graph_builder.add_edge("dev_planning", "architect")
 # graph_builder.add_edge("architect", "role_allocate")
