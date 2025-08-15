@@ -37,6 +37,8 @@ from langchain_core.tools import tool
 from langgraph.types import interrupt
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 import uuid
+from src.core.config import git_config
+
 # Load .env from repo root explicitly and override to ensure keys are visible
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
 # Initialize callback; it reads LANGFUSE_* from environment
@@ -356,18 +358,19 @@ graph.name = "agentic-coding-graph"
 parser = JsonOutputParser()
 
 async def main():
-    with langfuse.start_as_current_span(name="dexter-chat-session") as span:
-        span.update_trace(user_id="Dexter")
-        result = await graph.ainvoke(
-            {"messages": [HumanMessage(content="Create a Shopping site app like Amazon only for frontend")],
-            "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git"
-            },
-            config={
-                "configurable": {"thread_id": str(uuid.uuid4())},
-                "callbacks": [lf_cb]
-            }
-        )
-        print(result)
+    async with git_config(app=None):
+        with langfuse.start_as_current_span(name="dexter-chat-session") as span:
+            span.update_trace(user_id="Dexter")
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage(content="Create a timer app  only for frontend")],
+                "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git"
+                },
+                config={
+                    "configurable": {"thread_id": str(uuid.uuid4())},
+                    "callbacks": [lf_cb]
+                }
+            )
+            print(result)
 
 if __name__ == "__main__":
     asyncio.run(main())
