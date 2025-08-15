@@ -1,97 +1,192 @@
-# Spring Boot Development Guide and Conventions
+# Spring Boot Development Rules and Best Practices
 
-This document outlines the best practices and conventions for developing applications with Spring Boot. Following these guidelines will help ensure that your projects are robust, maintainable, and scalable.
+This document outlines the essential rules and best practices for developing robust, scalable, and maintainable applications using the Spring Boot framework.
+
+---
 
 ## 1. Project Structure
 
-A well-organized project structure is crucial for maintainability. Spring Boot does not enforce a strict layout, but the following structure is highly recommended.
+A consistent and logical project structure is crucial for maintainability.
 
-### 1.1. Package Naming
+**1.1 Recommended Package Structure**
 
-Follow Java's recommended package naming conventions. Use a reversed domain name, such as `com.example.project`. This ensures that your packages are unique and avoids naming conflicts.
-
-### 1.2. Main Application Class
-
-Place your main application class (the one annotated with `@SpringBootApplication`) in a root package above all other classes. The `@SpringBootApplication` annotation enables component scanning, and placing it in the root package ensures that all sub-packages and their components are discovered automatically.
-
-### 1.3. Typical Layout
-
-Organize your code into feature-specific packages. This approach, often referred to as "package by feature," enhances modularity and makes the codebase easier to navigate.
+Group classes by feature or domain. Avoid layering packages by type (e.g., `controller`, `service`).
 
 ```
-com
-└── example
-    └── myapplication
-        ├── MyApplication.java
-        ├── customer
-        │   ├── Customer.java
-        │   ├── CustomerController.java
-        │   ├── CustomerService.java
-        │   └── CustomerRepository.java
-        └── order
-            ├── Order.java
-            ├── OrderController.java
-            ├── OrderService.java
-            └── OrderRepository.java
+com.example.project/
+├── Application.java
+├── config/
+│   ├── SecurityConfig.java
+│   └── WebConfig.java
+├── features/
+│   ├── user/
+│   │   ├── UserController.java
+│   │   ├── UserService.java
+│   │   ├── UserRepository.java
+│   │   └── User.java
+│   └── order/
+│       ├── OrderController.java
+│       ├── OrderService.java
+│       └── Order.java
+├── security/
+│   ├── JwtTokenProvider.java
+│   └── UserDetailsServiceImpl.java
+├── exception/
+│   ├── GlobalExceptionHandler.java
+│   └── ResourceNotFoundException.java
+└── utils/
+    └── DateUtils.java
 ```
 
-In this structure:
-- **`MyApplication.java`**: The main application entry point.
-- **`customer` package**: Contains all classes related to the customer feature.
-- **`order` package**: Contains all classes related to the order feature.
+**1.2 Naming Conventions**
+
+- **Classes:** PascalCase (`UserService`).
+- **Methods & Variables:** camelCase (`getUserById`).
+- **Packages:** lowercase (`com.example.project.features.user`).
+
+---
 
 ## 2. Dependency Management
 
-Leverage Spring Boot starters to simplify dependency management. Starters are a set of convenient dependency descriptors that bundle all the necessary dependencies for a specific feature.
+Use Maven or Gradle for dependency management.
 
-- **`spring-boot-starter-web`**: For building RESTful web applications.
-- **`spring-boot-starter-data-jpa`**: For database access using JPA.
-- **`spring-boot-starter-test`**: For writing unit and integration tests.
+- **Spring Boot Starters:** Prefer starters (`spring-boot-starter-web`) to manage dependency versions.
+- **BOM (Bill of Materials):** Use the Spring Boot BOM to ensure compatible dependency versions.
+- **Versioning:** Keep the Spring Boot parent version up-to-date.
 
-Using starters reduces the risk of version conflicts and simplifies your build configuration.
+---
 
-## 3. Configuration Management
+## 3. Configuration
 
-Externalize your configuration properties to separate them from your application code. This practice allows you to run your application in different environments without modifying the source code.
+**3.1 Application Properties**
 
-- Use `application.properties` or `application.yml` for configuration.
-- Define environment-specific profiles (e.g., `application-dev.properties`, `application-prod.properties`) to manage configurations for different environments.
+- Use `application.yml` or `application.properties` for configuration. YAML is preferred for its readability.
+- Externalize configuration — do not hardcode values.
 
-## 4. Logging
+**3.2 Profile-Specific Configuration**
 
-Implement a robust logging strategy to facilitate debugging, monitoring, and auditing.
+Use profiles (`dev`, `prod`, `test`) for environment-specific settings.
 
-- Use **SLF4J** as the logging facade. Spring Boot defaults to Logback as the logging implementation, which is a solid choice for most applications.
-- Configure log levels (e.g., `DEBUG`, `INFO`, `WARN`, `ERROR`) appropriately for different environments. In production, you typically want to log at the `INFO` level or higher.
+- `application-dev.yml`
+- `application-prod.yml`
 
-## 5. Exception Handling
+Activate a profile using `spring.profiles.active=dev`.
 
-Implement a centralized exception handling mechanism to ensure consistent error responses across your application.
+**3.3 `@ConfigurationProperties`**
 
-- Use the `@ControllerAdvice` annotation to create a global exception handler.
-- Define specific exception handlers for different types of exceptions to provide meaningful error messages to clients.
+Bind configuration to strongly-typed Java objects for type safety.
 
-## 6. Testing
+```java
+@ConfigurationProperties(prefix = "app.security")
+public class AppSecurityProperties {
+    private String jwtSecret;
+    // getters and setters
+}
+```
 
-A comprehensive testing strategy is essential for building reliable applications.
+---
 
-- **Unit Tests**: Test individual components in isolation. Use mock objects (e.g., with Mockito) to isolate the component under test.
-- **Integration Tests**: Test the interaction between multiple components. Spring Boot provides excellent support for integration testing with annotations like `@SpringBootTest`.
-- **End-to-End Tests**: Test the entire application flow, from the UI to the database.
+## 4. API Design
+
+**4.1 RESTful Conventions**
+
+- Use nouns for resource URIs (`/api/users`).
+- Use standard HTTP methods (GET, POST, PUT, DELETE).
+- Use HTTP status codes correctly (200, 201, 400, 404, 500).
+
+**4.2 DTOs (Data Transfer Objects)**
+
+- Use DTOs to separate internal domain models from external API contracts.
+- Use validation annotations (`@Valid`, `@NotNull`) on DTOs.
+
+Example:
+
+```java
+public class CreateUserRequest {
+    @NotBlank
+    private String username;
+    @Email
+    private String email;
+}
+```
+
+**4.3 Versioning**
+
+Use URI versioning (`/api/v1/users`).
+
+---
+
+## 5. Error Handling
+
+**5.1 Centralized Exception Handling**
+
+Use `@RestControllerAdvice` and `@ExceptionHandler` for global error handling.
+
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleNotFound(ResourceNotFoundException ex) {
+        // ...
+    }
+}
+```
+
+**5.2 Custom Exceptions**
+
+Create custom, semantic exceptions for specific error cases.
+
+---
+
+## 6. Data Persistence
+
+**6.1 JPA / Spring Data**
+
+- Use Spring Data JPA for repository abstraction.
+- Keep repositories focused on data access.
+- Business logic belongs in service layers.
+
+**6.2 Transactions**
+
+Use `@Transactional` at the service layer to ensure data consistency.
+
+---
 
 ## 7. Security
 
-Secure your application by integrating Spring Security.
+**7.1 Spring Security**
 
-- Implement authentication to verify the identity of users.
-- Implement authorization to control access to resources based on user roles and permissions.
-- Protect against common security vulnerabilities, such as CSRF attacks and SQL injection.
+- Use the Spring Security starter (`spring-boot-starter-security`).
+- Configure security rules in a `SecurityConfig` class.
+- Use method-level security (`@PreAuthorize`) for fine-grained control.
 
-## 8. Performance Monitoring
+**7.2 Passwords**
 
-Monitor the health and performance of your application using Spring Boot Actuator.
+Always hash passwords using `BCryptPasswordEncoder`.
 
-- Actuator provides a set of production-ready endpoints that expose information about your application's health, metrics, and more.
-- Secure the Actuator endpoints to prevent unauthorized access to sensitive information.
+**7.3 CORS**
 
-By adhering to these guidelines and consulting the [official Spring Boot documentation](https://docs.spring.io/spring-boot/docs/current/reference/html/), you can develop high-quality Spring Boot applications that are easy to maintain and scale.
+Configure CORS globally in your `WebConfig` or with `@CrossOrigin` annotations.
+
+---
+
+## 8. Testing
+
+**8.1 Test Layers**
+
+- **Unit Tests:** Test services and components in isolation (`@ExtendWith(MockitoExtension.class)`).
+- **Integration Tests:** Test the full application context (`@SpringBootTest`).
+- **API Tests:** Use `@WebMvcTest` or `@SpringBootTest` with `TestRestTemplate`.
+
+**8.2 Test Slices**
+
+Use test slices like `@DataJpaTest` and `@WebMvcTest` to test specific parts of the application.
+
+---
+
+## 9. Performance
+
+- Enable caching with `@EnableCaching` and `@Cacheable`.
+- Use asynchronous processing with `@Async` for long-running tasks.
+- Monitor application performance with Actuator (`spring-boot-starter-actuator`).

@@ -82,5 +82,3 @@ architect_agent_prompts = BasePrompt(
     creator="Anthony",
     prompt=architect_prompt_template
 )
-
-
