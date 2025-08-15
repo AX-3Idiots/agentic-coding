@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi.responses import JSONResponse, StreamingResponse
 from .workflow.graph import graph
 from langchain_core.messages import HumanMessage
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from .callbacks.logging_callback_handler import LoggingCallbackHandler
 from .core.config import git_config
 import logging
@@ -16,6 +17,7 @@ load_dotenv()
 # LoggingCallbackHandler 인스턴스 생성
 logger = logging.getLogger(__name__)
 callback_handler = LoggingCallbackHandler(logger, "default_session")
+langfuse_callback_handler = LangfuseCallbackHandler()
 
 app = FastAPI(
     title="agentic-coding",
@@ -35,7 +37,7 @@ async def read_root(request: Request):
             "base_url": request.git_url
             },
             config={                
-                "callbacks": [callback_handler]
+                "callbacks": [callback_handler, langfuse_callback_handler]
             },
     )
     return {"response": response}
