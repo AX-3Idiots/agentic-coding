@@ -149,7 +149,10 @@ resolver_agent = create_resolver_agent(
 def parse_final_answer_with_langchain(text: str):
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
-        raise ValueError("No <final_answer>...</final_answer> found")
+        try:
+            return parser.parse(text)
+        except Exception as e:
+            raise ValueError("No <final_answer>...</final_answer> found")
     return parser.parse(m.group(1).strip())
 
 async def solution_owner(state: OverallState, config: RunnableConfig):
