@@ -35,6 +35,7 @@ from ..agents.graph import create_custom_react_agent
 from langchain_core.tools import tool
 from langgraph.types import interrupt
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+import re
 
 load_dotenv()
 
@@ -42,24 +43,12 @@ class OverallState(TypedDict):
     """State for the overall graph."""
     messages: Annotated[List[AnyMessage], add_messages]
     base_url: str
-    response: str
-    project_name: str
-    requirements: List[str]
-    directory_tree: List[str]
-    user_scenarios: List[str]
-    processes: List[str]
-    domain_entities: List[str]
-    non_functional_reqs: List[str]
-    exclusions: List[str]
-    language: list[str]
-    framework: list[str]
-    library: list[str]
-    main_goals: list[str]
-    sub_goals: dict[str, list[str]]
-    fe_branch_name: str
-    be_branch_name: str
     fe_spec: dict[str, Any] | None
     be_spec: dict[str, Any] | None
+    response: str
+    project_name: str
+    fe_branch_name: str
+    be_branch_name: str
     fe_architect_result: dict[str, Any]
     be_architect_result: dict[str, Any]
     user_story_groups: list[dict[str, list[str] | str]]
@@ -87,6 +76,8 @@ llm = ChatBedrockConverse(
     max_tokens=None,
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
+
+parser = JsonOutputParser()
 
 async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.5, **kwargs):
     """
@@ -123,8 +114,9 @@ def human_assistance(query: str) -> str:
     """
     Use this tool when you need human assistance.
     """
-    human_response = interrupt({"query": query})
-    return human_response["data"]
+    # human_response = interrupt({"query": query})
+    # return human_response["data"]
+    return "Just assume the safe default for the archetype and requirements for software development."
 
 solution_owner_agent = create_custom_react_agent(
     model=llm,
@@ -153,6 +145,12 @@ resolver_agent = create_resolver_agent(
     prompt=resolver_prompts.prompt,
     name="resolver_agent"
 )
+
+def parse_final_answer_with_langchain(text: str):
+    m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
+    if not m:
+        raise ValueError("No <final_answer>...</final_answer> found")
+    return parser.parse(m.group(1).strip())
 
 async def solution_owner(state: OverallState, config: RunnableConfig):
     """Acts as the solution owner to validate the development plan.
@@ -192,7 +190,14 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
         'intermediate_steps': [],
         'chat_id': config['configurable']['thread_id']
         })
-    return {"messages": result['messages']}
+    data = parse_final_answer_with_langchain(result['messages'][-1].content)
+    return {
+        "messages": result['messages'],
+        "project_name": data['project_name'],
+        "summary": data['summary'],
+        "fe_spec": data['fe_spec'],
+        "be_spec": data['be_spec']
+    }
 
 async def architect(state: OverallState):
     """Acts as the software architect to implement the main goals.

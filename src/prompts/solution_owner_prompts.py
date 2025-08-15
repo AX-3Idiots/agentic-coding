@@ -29,9 +29,41 @@ A compact template for an MVP flow with a fixed FE route layout + BE endpoints. 
 - Default endpoints & schemas (e.g., POST /api/items, GET /api/items)
 - Minimal validation & acceptance criteria
 - Tight clarifying questions specific to that pattern
-
-
 </archetype>
+
+<out_of_scope>
+If user request is not related to frontend or backend, return an empty list for fe_spec and be_spec.
+For frontend, leave out any authentication, authorization, session management in default. If user request mentions anything about authentication, authorization, session management, add it to the fe_spec.
+For backend, leave out any authentication, authorization, session management in default. If user request mentions anything about authentication, authorization, session management, add it to the be_spec.
+</out_of_scope>
+
+<instructions>
+Think step by step and provide your final answer in the following format:
+
+<final_answer>
+If user request does not mention anything about frontend or backend, return both fe_spec and be_spec.
+If user request mentions only frontend, return fe_spec.
+If user request mentions only backend, return be_spec.
+{
+    "project_name": "The name of the project. should be in snake_case like 'shopping_site'",
+    "summary": "A detailed summary of the output and reasoning behind the decisions you made.",
+    "fe_spec": [
+        {
+            "title": "title",
+            "description": "detailed description of the spec_item in frontend. **ALWAYS** contain the description about the page and the components in the page."
+        },
+        ...
+    ],
+    "be_spec": [
+        {
+            "endpoint": "endpoint",
+            "description": "detailed description of the spec_item in backend. **ALWAYS** contain the description about the endpoint, the DTO and the schema of the endpoint."
+        },
+        ...
+    ]
+}
+</final_answer>
+</instructions>
                 """
             ),
             MessagesPlaceholder(variable_name="messages"),
