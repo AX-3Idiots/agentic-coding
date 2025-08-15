@@ -12,10 +12,9 @@ from langchain_core.messages import HumanMessage
 import json
 from typing import Annotated
 from langgraph.graph.message import add_messages
-from langchain_core.messages import AnyMessage, AIMessage
+from langchain_core.messages import AnyMessage, AIMessage, HumanMessage
 from pathlib import Path
 from ..models.schemas import ArchitectAgentResult
-from typing import Optional
 
 class ArchitectState(ToolState):
     """Architect 에이전트 전용으로 확장된 상태"""
@@ -26,8 +25,6 @@ class ArchitectState(ToolState):
     owner: str
     branch_name: str
     dev_rules: str
-
-    architect_result: Optional[ArchitectAgentResult]
 
 
 def create_architect_agent(
@@ -85,7 +82,7 @@ def create_architect_agent(
 def answer_generator(state: ArchitectState) -> dict:
     """
     Parses the last tool call messages to find the 'final_answer' tool output
-    and populates the 'architect_result' state.
+    and adds a confirmation message to the message list.
     """
     # The AI's decision to call a tool is in the second-to-last message.
     # We need to check if there are enough messages.
@@ -98,9 +95,9 @@ def answer_generator(state: ArchitectState) -> dict:
             if tool_call["name"] == "final_answer":
                 branch_name = tool_call["args"].get("branch_name")
                 if branch_name:
-                    return {
-                        "architect_result": ArchitectAgentResult(main_branch=branch_name)
-                    }
+                    confirmation_message = f"Architecture for branch '{branch_name}' has been successfully generated."
+                    new_message = HumanMessage(content=confirmation_message)
+                    return {"messages": [new_message]}
     return {}
 
 

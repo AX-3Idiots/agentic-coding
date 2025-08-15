@@ -30,17 +30,13 @@ class FinalAnswerTool(BaseTool):
 
     def _run(
         self,
-        owner: Optional[str] = None,
-        branch_name: Optional[str] = None,
-        architect_result: Optional[Dict[str, Any]] = None,
+        branch_name: Optional[str] = None
     ) -> str:
         payload = {
             "tool_name": self.name,
             "tool_code": {
                 # Always include provided fields; omit Nones for cleanliness
-                **({"owner": owner} if owner is not None else {}),
-                **({"branch_name": branch_name} if branch_name is not None else {}),
-                **({"architect_result": architect_result} if architect_result is not None else {}),
+                **({"branch_name": branch_name} if branch_name is not None else {})
             },
         }
         # Return as JSON string so downstream regex/json parsing can consume it

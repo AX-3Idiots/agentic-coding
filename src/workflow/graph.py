@@ -162,7 +162,7 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
         OverallState: An updated state dictionary with the solution owner's
             response message.
             Note: The return statement is currently commented out.
-    
+
         Example:
             state = {
                 "messages": [HumanMessage(content="What is the main goal of the project?")],
@@ -183,7 +183,7 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
                     "endpoint": "GET /users/me","description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
                     }
                 ]
-            }            
+            }
     """
     result = await solution_owner_agent.ainvoke({
         'messages': state['messages'],
@@ -213,7 +213,7 @@ async def architect(state: OverallState):
         ArchitectState: An updated state dictionary with the architect's
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
-    """    
+    """
     fe_spec = state.get("fe_spec", None)
     be_spec = state.get("be_spec", None)
 
@@ -257,8 +257,6 @@ async def architect(state: OverallState):
         if isinstance(msgs, list):
             latest_messages.extend(msgs)
 
-        res = result['architect_result']
-        print(res)
     return {
         "messages": latest_messages
     }
