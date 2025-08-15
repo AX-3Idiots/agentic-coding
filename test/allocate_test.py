@@ -54,7 +54,7 @@ class OverallState(TypedDict):
     project_name: str
 
 config = Config(
-    read_timeout=900,
+    read_timeout=1800,
     connect_timeout=120,
     retries={
         "max_attempts": 8,
