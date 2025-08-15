@@ -269,23 +269,26 @@ async def architect(state: OverallState):
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
-    fe_spec = state.get("fe_spec", None)
-    be_spec = state.get("be_spec", None)
+    fe_spec = state.get("fe_spec")
+    be_spec = state.get("be_spec")
 
-    if fe_spec is None or be_spec is None:
-        return {
-            "messages": [AIMessage(content="Something went wrong. Please try again.")]
-        }
+    specs_to_process = []
+    if fe_spec:
+        specs_to_process.append(("FE", fe_spec))
+    if be_spec:
+        specs_to_process.append(("BE", be_spec))
 
-    specs_to_process = [("FE", fe_spec), ("BE", be_spec)]
     tasks = []
     for owner, spec in specs_to_process:
+        if not spec:
+            continue
         # 에이전트에 전달할 payload 구성
         payload = {
             "messages": state.get("messages", []),
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
+            "branch_name": f"{state.get('project_name','sample_project')}_{owner}",
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
@@ -294,7 +297,7 @@ async def architect(state: OverallState):
             architect_agent_to_run.ainvoke,
             payload,
             config={
-                "recursion_limit": 100,
+                "recursion_limit": 200,
                 "callbacks": [LangfuseCallbackHandler()]
             },
             max_retries=7,
@@ -352,7 +355,7 @@ graph.name = "agentic-coding-graph"
 
 parser = JsonOutputParser()
 
-async def main():    
+async def main():
     with langfuse.start_as_current_span(name="dexter-chat-session") as span:
         span.update_trace(user_id="Dexter")
         result = await graph.ainvoke(

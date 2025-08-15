@@ -110,8 +110,7 @@ def _create_initial_prompt(state: ArchitectState) -> dict:
     git_url = state.get('git_url', '')
     owner = state.get('owner', '')
     dev_rules = _build_dev_rules_text(owner)
-    project_name = 'sample-project'
-    branch_name = f"{project_name}_{owner}"
+    branch_name = state.get('branch_name', 'sample-project')
 
     plan_text = f"""
     <branch_name>
