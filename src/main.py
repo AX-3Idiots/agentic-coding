@@ -10,6 +10,7 @@ from .callbacks.logging_callback_handler import LoggingCallbackHandler
 from .core.config import git_config
 import logging
 import json
+import uuid
 
 setup_logging()
 load_dotenv()
@@ -37,6 +38,7 @@ async def read_root(request: Request):
             "base_url": request.git_url
             },
             config={
+                "configurable": {"thread_id": str(uuid.uuid4())},
                 "callbacks": [callback_handler, langfuse_callback_handler]
             },
     )
@@ -52,7 +54,7 @@ async def stream_workflow(request: Request):
             "messages": [HumanMessage(content=request.input)],
             "base_url": request.git_url,
         }
-        cfg = {"callbacks": [callback_handler, langfuse_callback_handler]}
+        cfg = {"configurable": {"thread_id": str(uuid.uuid4())}, "callbacks": [callback_handler, langfuse_callback_handler]}
 
         # Choose the best available stream API, but iterate with one unified loop
         events_iter = (

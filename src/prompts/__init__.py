@@ -1,8 +1,5 @@
 """Prompt Module."""
 
-from .dev_env_init_prompts import *
-from .dev_planning_prompts import *
-from .req_def_prompts import *
 from .role_allocate_prompts import *
 from .architect_agent_prompts import *
 from .se_agent_prompts import *
@@ -10,11 +7,10 @@ from .resolver_prompts import *
 from .conflict_prompts import *
 from .frontend_architect_agent_prompts import *
 from .backend_architect_agent_prompts import *
+from .solution_owner_prompts import *
 
 __all__ = [
-    "dev_env_init_prompts",
-    "dev_planning_prompts_v1",
-    "req_def_prompts",
+    "solution_owner_prompts_v1",
     "role_allocate_prompts",
     "architect_agent_prompts",
     "se_agent_prompts",
