@@ -21,7 +21,7 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 <rules>
 - 모든 작업은 `{branch_name}` 하위에서 수행
 - 모든 경로는 `{branch_name}` 루트를 기준으로 합니다.
-- 프론트엔드 아키텍처만 생성하며, `backend/` 경로에 있는 파일이나 디렉토리는 생성하지 않습니다.
+- [**IMPORTANT**] 프론트엔드 아키텍처만 생성하며, `frontend/` 경로에 있는 파일이나 디렉토리만 생성합니다.
 - 명령은 반드시 하나의 셸 라인으로 `&&` 연결
 - 도구 호출 시 필수 인자 없으면 호출 금지
   - execute_shell_command: `command` 필수
@@ -53,6 +53,7 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 </procedure>
 
 <instructions>
+Think step by step. ALWAYS follow the <rules> and <procedure>.
 1) 주어진 `{branch_name}`을 확인하고, 이를 기반으로 모든 작업을 수행합니다.
 2) 다음으로, `<spec>`에 기술된 화면 구성과 기능 설명을 분석하여, `<dev_rules>`에 명시된 기술 스택과 제약 조건에 맞는 최적의 디렉토리 구조와 기본 파일들을 설계하십시오.
 3) 설계된 아키텍처를 기반으로 `mkdir`, `git clone`, 파일 생성, `git push` 등을 포함한 단일 셸 라인 명령을 작성하고 `execute_shell_command`로 실행하십시오.
