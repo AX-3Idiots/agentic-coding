@@ -11,10 +11,12 @@ from langchain_core.messages import AnyMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from botocore.exceptions import ClientError
+from langfuse import get_client as get_langfuse_client
 import random
 from ..tools.final_answer_tools import FinalAnswerTool
 from ..prompts import (
-    architect_agent_prompts,
+    frontend_architect_agent_prompts,
+    backend_architect_agent_prompts,
     dev_env_init_prompts,
     dev_planning_prompts_v2,
     req_def_prompts,
@@ -32,6 +34,7 @@ from ..tools.spawn_container import spawn_engineers as spawn_engineers_tool
 from ..agents.resolver_agent_graph import create_resolver_agent
 from ..agents.architect_agent_graph import create_architect_agent
 import re
+from pathlib import Path
 
 load_dotenv()
 
@@ -50,69 +53,6 @@ APPROVED = {
     },
 }
 
-# Mapping owner/framework to rule files under src/rules
-RULE_FILE_MAP = {
-    "FE": {
-        "React": "react_rules.md",
-    },
-    "BE": {
-        "FastAPI": "fastapi_rules.md",
-        "Node.js": "nodejs_rules.md",
-        "Spring Boot": "spring_boot_rules.md",
-    },
-}
-
-# Language to framework defaults (auto-mapping)
-LANG_TO_FRAMEWORK_DEFAULT = {
-    "Java": "Spring Boot",
-    "Python": "FastAPI",
-    "Javascript": "Node.js",
-}
-
-def _read_rules_file(file_name: str) -> str:
-    """
-    주어진 규칙 파일 이름을 바탕으로 `src/rules/` 디렉토리에서 내용을 읽어
-    문자열로 반환한다. 파일이 없거나 읽기에 실패하면 빈 문자열을 반환하여
-    상위 로직이 안전하게 진행되도록 한다.
-    """
-    try:
-        rules_dir = Path(__file__).resolve().parent.parent / "rules"
-        target = rules_dir / file_name
-        if not target.exists():
-            return ""
-        return target.read_text(encoding="utf-8")
-    except Exception:
-        return ""
-
-def _build_dev_rules_text(frameworks: list[str], owner: str, languages: list[str] | None = None) -> str:
-    """
-    프레임워크를 규칙 파일에 매핑하여 개발 규칙 텍스트를 구성합니다. 프레임워크가 비어 있거나 소유자에 대해 지정되지 않은 경우, 선언된 언어에서 기본값을 추론합니다.
-    """
-    mapped = RULE_FILE_MAP.get(owner, {})
-    # Normalize frameworks; if not provided, infer from languages via defaults
-    fw_list = [fw for fw in (frameworks or []) if fw]
-    if not fw_list and languages:
-        for lang in languages:
-            default_fw = LANG_TO_FRAMEWORK_DEFAULT.get(lang)
-            if default_fw:
-                fw_list.append(default_fw)
-    # Deduplicate while preserving order
-    seen = set()
-    ordered_fw = []
-    for fw in fw_list:
-        if fw not in seen:
-            seen.add(fw)
-            ordered_fw.append(fw)
-    collected: list[str] = []
-    for fw in ordered_fw:
-        file_name = mapped.get(fw)
-        if not file_name:
-            continue
-        content = _read_rules_file(file_name)
-        if content:
-            header = f"\n# Rules for {owner} - {fw}\n\n"
-            collected.append(header + content.strip() + "\n")
-    return "\n".join(collected).strip()
 
 def parse_section(text: str, section_name: str) -> List[str]:
     """
@@ -169,6 +109,8 @@ class OverallState(TypedDict):
     sub_goals: dict[str, list[str]]
     fe_branch_name: str
     be_branch_name: str
+    fe_spec: dict[str, Any] | None
+    be_spec: dict[str, Any] | None
     fe_architect_result: dict[str, Any]
     be_architect_result: dict[str, Any]
     user_story_groups: list[dict[str, list[str] | str]]
@@ -230,11 +172,18 @@ dev_env_init_chain = dev_env_init_prompts.prompt | llm
 dev_planning_chain = dev_planning_prompts_v2.prompt | llm | JsonOutputParser()
 role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
 
-architect_agent = create_architect_agent(
+frontend_architect_agent = create_architect_agent(
     model=llm,
     tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
-    prompt=architect_agent_prompts.prompt,
-    name="architect_agent"
+    prompt=frontend_architect_agent_prompts.prompt,
+    name="frontend_architect_agent"
+)
+
+backend_architect_agent = create_architect_agent(
+    model=llm,
+    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
+    prompt=backend_architect_agent_prompts.prompt,
+    name="backend_architect_agent"
 )
 
 resolver_agent = create_resolver_agent(
@@ -378,6 +327,7 @@ async def dev_planning(state: OverallState):
         "directory_tree": parsed.get("directory_tree", [])
     }
 
+
 async def architect(state: OverallState):
     """Acts as the software architect to implement the main goals.
 
@@ -393,119 +343,87 @@ async def architect(state: OverallState):
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
+    def _read_rules_file(file_name: str) -> str:
+        """
+        주어진 규칙 파일 이름을 바탕으로 `src/rules/` 디렉토리에서 내용을 읽어
+        문자열로 반환한다. 파일이 없거나 읽기에 실패하면 빈 문자열을 반환하여
+        상위 로직이 안전하게 진행되도록 한다.
+        """
+        try:
+            rules_dir = Path(__file__).resolve().parent.parent / "rules"
+            target = rules_dir / file_name
+            if not target.exists():
+                return ""
+            return target.read_text(encoding="utf-8")
+        except Exception:
+            return ""
+
+    def _build_dev_rules_text(owner: str) -> str:
+        """
+        고정된 기술 스택(FE: React, BE: FastAPI)에 따라 owner에 맞는 개발 규칙을 반환합니다.
+        """
+        file_name = ""
+        framework = ""
+        if owner == "FE":
+            file_name = "react_rules.md"
+            framework = "React"
+        elif owner == "BE":
+            file_name = "fastapi_rules.md"
+            framework = "FastAPI"
+        else:
+            return ""
+
+        content = _read_rules_file(file_name)
+        if content:
+            header = f"\n# Rules for {owner} - {framework}\n\n"
+            return header + content.strip() + "\n"
+        return ""
+
     start_time = time.perf_counter()
     print("작업을 시작합니다...")
-    print(state.get("directory_tree", []))
-    main_goals = state.get("main_goals", [])
-    sub_goals_plan = state.get("sub_goals", {})
-    project_name = state.get("project_name", "sample-project")
 
-    # Main Goals 맵 생성
-    main_goals_map = {goal['id']: goal for goal in main_goals}
+    fe_spec = state.get("fe_spec")
+    be_spec = state.get("be_spec")
 
-    # Owner별 작업 취합
-    plan_builders = {
-        "BE": {"main_goals_map": {}, "sub_goals": defaultdict(list)}, # <--- defaultdict 사용
-        "FE": {"main_goals_map": {}, "sub_goals": defaultdict(list)}  # <--- defaultdict 사용
-    }
-
-    for goal_id, sub_goal_list in sub_goals_plan.items():
-        parent_main_goal = main_goals_map.get(goal_id)
-        if not parent_main_goal:
-            continue
-
-        for sub_goal in sub_goal_list:
-            owner = sub_goal.get("owner")
-
-            if owner in plan_builders:
-                builder = plan_builders[owner]
-                # main_goal 객체를 딕셔너리에 저장하여 자동으로 중복 제거
-                builder["main_goals_map"][goal_id] = parent_main_goal
-
-                keys_to_keep = {
-                    "id",
-                    "title",
-                    "description",
-                    "dependencies",
-                    "acceptance_criteria"
-                }
-
-                # 2. 새로운 딕셔너리를 만들어 원하는 키와 값만 복사
-                filtered_sub_goal = {
-                    key: sub_goal.get(key) for key in keys_to_keep
-                }
-                # sub_goal 추가
-                builder["sub_goals"][goal_id].append(filtered_sub_goal)
-
-    def _slugify_branch_base(name: str) -> str:
-        lower = name.strip().lower()
-        result_chars = []
-        prev_hyphen = False
-        for ch in lower:
-            if ch.isalnum():
-                result_chars.append(ch)
-                prev_hyphen = False
-            else:
-                if not prev_hyphen:
-                    result_chars.append('-')
-                    prev_hyphen = True
-        s = ''.join(result_chars).strip('-')
-        while '--' in s:
-            s = s.replace('--', '-')
-        return s
+    specs_to_process = []
+    if fe_spec and isinstance(fe_spec, dict):
+        specs_to_process.append(("FE", fe_spec))
+    if be_spec and isinstance(be_spec, dict):
+        specs_to_process.append(("BE", be_spec))
 
     tasks = []
     fe_branch_name = ""
     be_branch_name = ""
     fe_architect_result = {}
     be_architect_result = {}
-    # 각 Owner(FE, BE)에 대해 실행할 작업을 생성
-    for owner, builder in plan_builders.items():
-        if not builder["sub_goals"]:
-            continue # 해당 owner에 대한 작업이 없으면 건너뛰기
 
-        base = _slugify_branch_base(project_name)
-        branch_name = f"{base}_{owner}"
+    for owner, spec in specs_to_process:
+        if not spec.get("sub_goals"):
+            continue
 
-        if owner == "FE":
-            fe_branch_name = branch_name
-        else:
-            be_branch_name = branch_name
+        dev_rules_text = _build_dev_rules_text(owner)
 
-        dev_rules_text = _build_dev_rules_text(
-            state.get("framework", []),
-            owner,
-            languages=state.get("language", [])
-        )
-
-        plan = {
-            "project_name": project_name,
-            "branch_name": branch_name,
-            "main_goals": list(builder["main_goals_map"].values()),
-            "sub_goals": builder["sub_goals"],
-            "directory_tree": state.get("directory_tree", []),
+        # 에이전트에 전달할 payload 구성
+        payload = {
+            "messages": state.get("messages", []),
+            "spec": spec,
+            "dev_rules": dev_rules_text,
             "git_url": state.get("base_url", ""),
             "owner": owner,
-            "dev_rules": dev_rules_text,
         }
 
-        # # Owner별 프롬프트 선택 (FE/BE)
-        # owner_prompt = _select_architect_prompt_by_owner(owner)
-        # owner_architect_agent = create_architect_agent(
-        #     model=llm,
-        #     tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
-        #     prompt=owner_prompt,
-        #     name=f"architect_agent_{owner.lower()}"
-        # )
+        architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
 
         task = _retry_async(
-            architect_agent.ainvoke,
-            plan,
-            config={"recursion_limit": 100},
+            architect_agent_to_run.ainvoke,
+            payload,
+            config={
+                "recursion_limit": 100,
+                "callbacks": [get_langfuse_client().start_trace(name=f"architect_agent_{owner.lower()}")]
+            },
             max_retries=7,
             base_delay=0.6,
         )
-
         tasks.append(task)
 
     results = []
@@ -669,10 +587,10 @@ graph_builder.add_edge("define_req", "dev_env_init")
 graph_builder.add_edge("dev_env_init", "dev_planning")
 graph_builder.add_edge("dev_planning", "architect")
 graph_builder.add_edge("architect", END)
-graph_builder.add_edge("dev_planning", "architect")
-graph_builder.add_edge("architect", "role_allocate")
-graph_builder.add_edge("role_allocate", "spawn_engineers")
-graph_builder.add_edge("resolver", END)
+# graph_builder.add_edge("dev_planning", "architect")
+# graph_builder.add_edge("architect", "role_allocate")
+# graph_builder.add_edge("role_allocate", "spawn_engineers")
+# graph_builder.add_edge("resolver", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"

@@ -39,31 +39,31 @@ project/
 
 **1.2 Naming Conventions**
 
-* **Files & folders:** lowercase with dots or hyphens (e.g., `user.controller.js`).
-* **Classes:** PascalCase (e.g., `UserService`).
-* **Variables & functions:** camelCase.
+- **Files & folders:** lowercase with dots or hyphens (e.g., `user.controller.js`).
+- **Classes:** PascalCase (e.g., `UserService`).
+- **Variables & functions:** camelCase.
 
 **1.3 Entry Point**
 
-* Keep environment setup minimal in `server.js`.
-* Delegate app configuration to `app.js`.
+- Keep environment setup minimal in `server.js`.
+- Delegate app configuration to `app.js`.
 
 ---
 
 ## 2. Dependency Management
 
-* Use `npm` or `yarn` with exact versions (`--save-exact`) to avoid surprises.
-* Separate **dependencies** and **devDependencies**.
-* Avoid unnecessary packages — check for maintenance status before adding.
+- Use `npm` or `yarn` with exact versions (`--save-exact`) to avoid surprises.
+- Separate **dependencies** and **devDependencies**.
+- Avoid unnecessary packages — check for maintenance status before adding.
 
 Common packages:
 
-* Web framework: `express`, `fastify`, or `koa`
-* Database: `mongoose`, `sequelize`, `prisma`
-* Config: `dotenv`, `config`
-* Validation: `joi`, `zod`, `yup`
-* Testing: `jest`, `mocha`, `chai`, `supertest`
-* Logging: `winston`, `pino`
+- Web framework: `express`, `fastify`, or `koa`
+- Database: `mongoose`, `sequelize`, `prisma`
+- Config: `dotenv`, `config`
+- Validation: `joi`, `zod`, `yup`
+- Testing: `jest`, `mocha`, `chai`, `supertest`
+- Logging: `winston`, `pino`
 
 ---
 
@@ -71,26 +71,26 @@ Common packages:
 
 **3.1 Environment Variables**
 
-* Store sensitive config in `.env` (never commit).
-* Use `dotenv` for loading variables.
-* Centralize config in `config/index.js`.
+- Store sensitive config in `.env` (never commit).
+- Use `dotenv` for loading variables.
+- Centralize config in `config/index.js`.
 
 Example:
 
 ```js
-require('dotenv').config();
+require("dotenv").config();
 
 module.exports = {
   port: process.env.PORT || 3000,
   dbUri: process.env.DATABASE_URL,
-  jwtSecret: process.env.JWT_SECRET
+  jwtSecret: process.env.JWT_SECRET,
 };
 ```
 
 **3.2 Environment Separation**
 
-* `.env.development` for local dev
-* `.env.production` for production
+- `.env.development` for local dev
+- `.env.production` for production
 
 ---
 
@@ -98,31 +98,31 @@ module.exports = {
 
 **4.1 Routing**
 
-* Group routes by resource.
-* Use plural nouns (`/users`, `/orders`).
-* Apply versioning (`/api/v1/users`).
+- Group routes by resource.
+- Use plural nouns (`/users`, `/orders`).
+- Apply versioning (`/api/v1/users`).
 
 **4.2 Controllers**
 
-* Controllers handle HTTP logic only.
-* Business logic goes in `services/`.
+- Controllers handle HTTP logic only.
+- Business logic goes in `services/`.
 
 **4.3 Validation**
 
-* Validate request bodies, params, and queries.
-* Return clear, consistent error messages.
+- Validate request bodies, params, and queries.
+- Return clear, consistent error messages.
 
 Example:
 
 ```js
-const Joi = require('joi');
+const Joi = require("joi");
 
 const schema = Joi.object({
   name: Joi.string().required(),
-  email: Joi.string().email().required()
+  email: Joi.string().email().required(),
 });
 
-app.post('/users', validate(schema), userController.createUser);
+app.post("/users", validate(schema), userController.createUser);
 ```
 
 ---
@@ -131,31 +131,34 @@ app.post('/users', validate(schema), userController.createUser);
 
 **5.1 Centralized Error Handler**
 
-* Use Express/Fastify error middleware to handle all errors.
+- Use Express/Fastify error middleware to handle all errors.
 
 Example:
 
 ```js
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
+  res
+    .status(err.status || 500)
+    .json({ message: err.message || "Internal Server Error" });
 });
 ```
 
 **5.2 Custom Error Classes**
 
-* Define error classes for domain-specific errors.
+- Define error classes for domain-specific errors.
 
 ---
 
 ## 6. Logging
 
-* Use `winston` or `pino` for structured logging.
-* Log level by environment:
+- Use `winston` or `pino` for structured logging.
+- Log level by environment:
 
-  * Development: `debug`
-  * Production: `info` or higher
-* Log in JSON format in production for observability tools.
+  - Development: `debug`
+  - Production: `info` or higher
+
+- Log in JSON format in production for observability tools.
 
 ---
 
@@ -163,22 +166,22 @@ app.use((err, req, res, next) => {
 
 **7.1 Test Layers**
 
-* Unit: individual functions and services.
-* Integration: controllers and DB.
-* E2E: full API workflows.
+- Unit: individual functions and services.
+- Integration: controllers and DB.
+- E2E: full API workflows.
 
 **7.2 Tools**
 
-* `jest` + `supertest` for API testing.
+- `jest` + `supertest` for API testing.
 
 Example:
 
 ```js
-const request = require('supertest');
-const app = require('../src/app');
+const request = require("supertest");
+const app = require("../src/app");
 
-test('GET /health', async () => {
-  const res = await request(app).get('/health');
+test("GET /health", async () => {
+  const res = await request(app).get("/health");
   expect(res.statusCode).toBe(200);
 });
 ```
@@ -187,16 +190,16 @@ test('GET /health', async () => {
 
 ## 8. Security
 
-* Use `helmet` for HTTP security headers.
-* Always validate and sanitize user input.
-* Hash passwords with `bcrypt` or `argon2`.
-* Use JWT with expiration and refresh tokens.
-* Enable CORS only for allowed origins.
+- Use `helmet` for HTTP security headers.
+- Always validate and sanitize user input.
+- Hash passwords with `bcrypt` or `argon2`.
+- Use JWT with expiration and refresh tokens.
+- Enable CORS only for allowed origins.
 
 Example:
 
 ```js
-const helmet = require('helmet');
+const helmet = require("helmet");
 app.use(helmet());
 ```
 
@@ -204,7 +207,7 @@ app.use(helmet());
 
 ## 9. Performance & Monitoring
 
-* Use clustering (`node:cluster` or PM2) in production.
-* Cache frequent DB queries with Redis.
-* Use tools like `prom-client` for Prometheus metrics.
-* Implement health check endpoints (`/health`).
+- Use clustering (`node:cluster` or PM2) in production.
+- Cache frequent DB queries with Redis.
+- Use tools like `prom-client` for Prometheus metrics.
+- Implement health check endpoints (`/health`).

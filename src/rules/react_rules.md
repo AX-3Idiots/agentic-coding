@@ -31,6 +31,7 @@ src/
 ```
 
 In this structure:
+
 - **`components`**: Contains globally reusable components (e.g., `Button`, `Modal`).
 - **`features`**: Each feature module contains its own components, state logic, and services.
 - **`services`**: Manages communication with external APIs.
@@ -59,12 +60,44 @@ Adhere to modern React practices for creating clean, efficient, and reusable com
 - **Lift State Up**: When multiple components need access to the same state, lift it to their closest common ancestor.
 - **Global State**: For complex, application-wide state, use a dedicated state management library like Redux with Redux Toolkit.
 
-## 3. Dependency Management
+## 3. Dependency Management and Conflict Resolution
 
-Use a package manager like `npm` or `yarn` to handle project dependencies. Keep your `package.json` clean and organized.
+Effective dependency management with `npm` is critical for a stable React project. This section provides a comprehensive guide to resolving common `peerDependency` conflicts without resorting to the `--legacy-peer-deps` flag.
 
-- **UI Libraries**: Use established UI libraries like Material-UI or Ant Design for a consistent look and feel. When using them, import components directly to minimize bundle size.
-- **Bundle Size**: Regularly audit your bundle size using tools like `source-map-explorer` to identify and remove unnecessary dependencies.
+### 3.1. Understanding `peerDependencies`
+
+`peerDependencies` is a field in `package.json` where a package specifies its compatibility with a host package version. For a React component library, `react` and `react-dom` are typical `peerDependencies`.
+
+Since npm v7, `peerDependencies` are installed automatically. If a version conflict is detected in the dependency tree, npm will abort the installation, which is a common source of installation failures.
+
+### 3.2. Why You Should Avoid `--legacy-peer-deps`
+
+The `--legacy-peer-deps` flag makes npm ignore `peerDependency` conflicts, similar to older npm versions. While it seems like a quick fix, it can lead to:
+
+- **Runtime Errors**: Using incompatible versions of libraries (e.g., React) can cause unpredictable errors.
+- **Hidden Issues**: It masks underlying dependency tree problems that should be properly resolved.
+
+It is highly recommended to resolve these conflicts directly.
+
+### 3.3. Steps to Resolve Dependency Conflicts
+
+1.  **Analyze the npm Error Message**: The error output from `npm install` will tell you which packages have conflicting `peerDependency` requirements.
+2.  **Inspect the Dependency Tree**: Use `npm ls [package-name]` (e.g., `npm ls react`) to see which versions are required by different packages.
+3.  **Adjust Package Versions**: Update or downgrade packages to align their `peerDependency` requirements.
+4.  **Use `overrides`**: As a last resort, use the `overrides` field in `package.json` to force a specific version of a package throughout your project. This is especially useful for ensuring a single version of `react` and `react-dom`.
+
+    ```json
+    // package.json
+    "overrides": {
+      "react": "^18.2.0",
+      "react-dom": "^18.2.0"
+    }
+    ```
+
+### 3.4. Best Practices
+
+- **UI Libraries**: When using libraries like Material-UI or Ant Design, import components directly to minimize the final bundle size.
+- **Bundle Size Audits**: Regularly audit your bundle size with tools like `source-map-explorer` to identify and remove unnecessary dependencies.
 
 ## 4. Styling
 

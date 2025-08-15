@@ -36,7 +36,7 @@ async def read_root(request: Request):
             {"messages": [HumanMessage(content=request.input)],
             "base_url": request.git_url
             },
-            config={                
+            config={
                 "callbacks": [callback_handler, langfuse_callback_handler]
             },
     )
@@ -52,7 +52,7 @@ async def stream_workflow(request: Request):
             "messages": [HumanMessage(content=request.input)],
             "base_url": request.git_url,
         }
-        cfg = {"callbacks": [callback_handler]}
+        cfg = {"callbacks": [callback_handler, langfuse_callback_handler]}
 
         # Choose the best available stream API, but iterate with one unified loop
         events_iter = (
