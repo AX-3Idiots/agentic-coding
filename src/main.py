@@ -64,23 +64,30 @@ async def stream_workflow(request: Request):
         )
 
         async for event in events_iter:
-            try:
-                if isinstance(event, (bytes, bytearray)):
-                    text = event.decode("utf-8", errors="ignore")
-                    try:
-                        obj = json.loads(text)
-                    except Exception:
-                        obj = {"message": text}
-                elif isinstance(event, (dict, list)):
-                    obj = event
-                else:
-                    text = str(event)
-                    try:
-                        obj = json.loads(text)
-                    except Exception:
-                        obj = {"message": text}
+            try:                
+                obj = event
+                if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
+                    print("gotcha")
+                    obj = {
+                        "event": "on_tool_start", 
+                        "tool_name": "human_assistance", 
+                        "langgrah_node": "tools", 
+                        "data": obj.data
+                    }
+                if obj["event"] == "on_chat_model_stream":
+                    print(obj)
+                    chunk = event["data"].get("chunk")
+                    if chunk and hasattr(chunk, "content"):
+                        content = chunk.content
+                        if content:
+                            # Serialize the content directly to NDJSON
+                            obj = {
+                                "data": content,
+                            }
+                            # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                
                 yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
-            except Exception:
+            except Exception as e:
+                print(e)
                 continue
 
     return StreamingResponse(
