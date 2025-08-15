@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage
 import json
 from typing import Annotated
 from langgraph.graph.message import add_messages
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, AIMessage
 from pathlib import Path
 from ..models.schemas import ArchitectAgentResult
 from typing import Optional
@@ -83,13 +83,24 @@ def create_architect_agent(
 
 
 def answer_generator(state: ArchitectState) -> dict:
-    last_tool_call = state["messages"][-1]
-    if last_tool_call and last_tool_call.tool_calls:
-        for tool_call in last_tool_call.tool_calls:
+    """
+    Parses the last tool call messages to find the 'final_answer' tool output
+    and populates the 'architect_result' state.
+    """
+    # The AI's decision to call a tool is in the second-to-last message.
+    # We need to check if there are enough messages.
+    if len(state["messages"]) < 2:
+        return {}
+
+    last_ai_message = state["messages"][-2]
+    if isinstance(last_ai_message, AIMessage) and last_ai_message.tool_calls:
+        for tool_call in last_ai_message.tool_calls:
             if tool_call["name"] == "final_answer":
                 branch_name = tool_call["args"].get("branch_name")
                 if branch_name:
-                    return {"architect_result": ArchitectAgentResult(main_branch=branch_name)}
+                    return {
+                        "architect_result": ArchitectAgentResult(main_branch=branch_name)
+                    }
     return {}
 
 
