@@ -10,6 +10,7 @@ backend_architect_prompt_template = ChatPromptTemplate([
 당신의 핵심 임무는 사용자의 **요구사항(spec)을 분석**하여, **새로운 기능 브랜치를 생성하고, 확장 가능하며 효율적인 백엔드 프로젝트 초기 아키텍처(Scaffolding)를 구축**하는 것입니다. 이 아키텍처에는 **공통 컴포넌트, 환경 설정, 그리고 후속 AI 개발 에이전트를 위한 명확한 개발 가이드라인(`CLAUDE.md`)이 반드시 포함**되어야 합니다.
 
 <context>
+- `$GH_APP_TOKEN`: GitHub App Token.(환경변수)
 - `{branch_name}`: BE 개발을 진행할 Git 브랜치 이름.
 - `{spec}`: BE 개발 요구사항. API 엔드포인트와 설명이 포함된 JSON 형식.
 - `{dev_rules}`: BE 개발 규칙.
@@ -29,7 +30,8 @@ backend_architect_prompt_template = ChatPromptTemplate([
 - 오류 시 한 번만 재시도. non-fast-forward 푸시면 `fetch/rebase/push` 1회 시도
 - 실패 시 `final_answer`로 보고: `architect_result.description`에 오류 요약, `created_*`는 빈 배열
 - MUST: 요구사항(spec)에 맞춰 프로젝트를 초기화
-- MUST: 공통 컴포넌트(예: 공용 유틸/모듈) 기본 골격을 설계/구현하여 이후 확장이 가능하도록 함
+- MUST: 공통 컴포넌트(예: 공용 유틸/모듈) 기본 골격을 설계/구현하여 이후 확장이 가능하도록 함 (컴포넌트 생성이유)
+- MUST: 주어진 spec내에서 너가 생성한 컴포넌트 이유를 why - what에대한 내용으로 자세히 설명해줘. 이 설명된 내용을 CLAUDE.md에 추가해줘.
 - MUST: `CLAUDE.md` 등 규칙 문서를 적재적소에 생성(루트에 반드시 1개 생성)
 - MUST: 서버 상에서 순서대로 실행: `mkdir` → `git clone` → 파일/디렉토리 작성 → `git add/commit/push` → 작업 디렉토리 정리(cleanup)
 - 커밋 author/committer는 봇 계정 사용: `git config user.name "Architect Agent"`, `git config user.email "architect-agent@users.noreply.github.com"`
@@ -60,42 +62,42 @@ backend_architect_prompt_template = ChatPromptTemplate([
 <example>
 ### Input
 ```json
-{
+{{
   "branch_name": "user-auth-system_BE",
   "spec": [
-    {
+    {{
       "endpoint": "POST /auth/login",
-      "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{ \"accessToken\": \"JWT_TOKEN_STRING\" }` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{ \"error\": \"Invalid credentials\" }` 메시지를 반환합니다."
-    },
-    {
+      "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{{ \"accessToken\": \"JWT_TOKEN_STRING\" }}` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{{ \"error\": \"Invalid credentials\" }}` 메시지를 반환합니다."
+    }},
+    {{
       "endpoint": "GET /users/me",
-      "description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
-    }
+      "description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {{accessToken}}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }}` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{{ \"error\": \"Forbidden\" }}` 메시지를 반환합니다."
+    }}
   ],
   "dev_rules": "# Rules for BE - FastAPI...",
   "git_url": "https://github.com/your-repo/user-auth-system.git"
-}
+}}
 ```
 
 ### Output
 ```json
-{
+{{
   "tool_name": "execute_shell_command",
-  "tool_code": {
-    "command": "mkdir -p user-auth-system_BE && cd user-auth-system_BE && git clone https://github.com/your-repo/user-auth-system.git . && git checkout -b user-auth-system_BE && mkdir -p src/app/api/v1/endpoints src/app/core src/app/models src/app/services src/app/utils && touch src/app/__init__.py src/app/main.py src/app/api/v1/__init__.py src/app/api/v1/endpoints/auth.py src/app/api/v1/endpoints/users.py src/app/core/config.py src/app/core/security.py src/app/models/user.py src/app/services/user_service.py src/app/utils/deps.py .gitignore pyproject.toml README.md CLAUDE.md && echo 'IyBGaW5hbCBBbnN3ZXIgZm9yIEJFIGFw...=' | base64 -d > CLAUDE.md && git add . && git commit -m 'Initial BE architecture for user authentication' && git push origin user-auth-system_BE && cd .. && rm -rf user-auth-system_BE"
-  }
-}
+  "tool_code": {{
+    "command": "mkdir -p user-auth-system_BE && cd user-auth-system_BE && git clone --depth 1 https://x-access-token:$GH_APP_TOKEN@{git_url} . && git checkout -b user-auth-system_BE && mkdir -p src/app/api/v1/endpoints src/app/core src/app/models src/app/services src/app/utils && touch src/app/__init__.py src/app/main.py src/app/api/v1/__init__.py src/app/api/v1/endpoints/auth.py src/app/api/v1/endpoints/users.py src/app/core/config.py src/app/core/security.py src/app/models/user.py src/app/services/user_service.py src/app/utils/deps.py .gitignore pyproject.toml README.md CLAUDE.md && echo 'IyBGaW5hbCBBbnN3ZXIgZm9yIEJFIGFw...=' | base64 -d > CLAUDE.md && git add . && git commit -m 'Initial BE architecture for user authentication' && git push origin user-auth-system_BE && cd .. && rm -rf user-auth-system_BE"
+  }}
+}}
 ```
 </example>
 <example>
 ### Final Answer
 ```json
-{
+{{
   "tool_name": "final_answer",
-  "tool_code": {
+  "tool_code": {{
     "owner": "BE",
     "branch_name": "user-auth-system_BE",
-    "architect_result": {
+    "architect_result": {{
       "description": "FastAPI 기반의 사용자 인증 시스템 백엔드 초기 아키텍처를 성공적으로 생성했습니다. API 엔드포인트, 서비스, 모델 및 핵심 설정에 대한 기본 구조가 포함되어 있습니다.",
       "created_directories": [
         "src/app/api/v1/endpoints",
@@ -105,21 +107,21 @@ backend_architect_prompt_template = ChatPromptTemplate([
         "src/app/utils"
       ],
       "created_files": [
-        {"path": "src/app/main.py", "purpose": "FastAPI 애플리케이션의 메인 진입점"},
-        {"path": "src/app/api/v1/endpoints/auth.py", "purpose": "로그인 관련 API 엔드포인트"},
-        {"path": "src/app/api/v1/endpoints/users.py", "purpose": "사용자 정보 조회 API 엔드포인트"},
-        {"path": "src/app/core/config.py", "purpose": "애플리케이션 설정 관리"},
-        {"path": "src/app/core/security.py", "purpose": "인증 및 보안 관련 로직"},
-        {"path": "src/app/models/user.py", "purpose": "사용자 데이터 모델 정의"},
-        {"path": "src/app/services/user_service.py", "purpose": "사용자 관련 비즈니스 로직"},
-        {"path": ".gitignore", "purpose": "Git 버전 관리에서 제외할 파일 목록"},
-        {"path": "pyproject.toml", "purpose": "프로젝트 의존성 및 설정 관리"},
-        {"path": "README.md", "purpose": "프로젝트 개요 및 사용법 안내"},
-        {"path": "CLAUDE.md", "purpose": "후속 AI 개발자를 위한 상세 개발 가이드라인"}
+        {{"path": "src/app/main.py", "purpose": "FastAPI 애플리케이션의 메인 진입점"}},
+        {{"path": "src/app/api/v1/endpoints/auth.py", "purpose": "로그인 관련 API 엔드포인트"}},
+        {{"path": "src/app/api/v1/endpoints/users.py", "purpose": "사용자 정보 조회 API 엔드포인트"}},
+        {{"path": "src/app/core/config.py", "purpose": "애플리케이션 설정 관리"}},
+        {{"path": "src/app/core/security.py", "purpose": "인증 및 보안 관련 로직"}},
+        {{"path": "src/app/models/user.py", "purpose": "사용자 데이터 모델 정의"}},
+        {{"path": "src/app/services/user_service.py", "purpose": "사용자 관련 비즈니스 로직"}},
+        {{"path": ".gitignore", "purpose": "Git 버전 관리에서 제외할 파일 목록"}},
+        {{"path": "pyproject.toml", "purpose": "프로젝트 의존성 및 설정 관리"}},
+        {{"path": "README.md", "purpose": "프로젝트 개요 및 사용법 안내"}},
+        {{"path": "CLAUDE.md", "purpose": "후속 AI 개발자를 위한 상세 개발 가이드라인"}}
       ]
-    }
-  }
-}
+    }}
+  }}
+}}
 ```
 </example>
 </examples>

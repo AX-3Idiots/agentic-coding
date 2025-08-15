@@ -14,6 +14,8 @@ from typing import Annotated
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage
 from pathlib import Path
+from ..models.schemas import ArchitectAgentResult
+from typing import Optional
 
 class ArchitectState(ToolState):
     """Architect 에이전트 전용으로 확장된 상태"""
@@ -22,6 +24,10 @@ class ArchitectState(ToolState):
     spec: List[Dict[str, Any]]
     git_url: str
     owner: str
+    branch_name: str
+    dev_rules: str
+
+    architect_result: Optional[ArchitectAgentResult]
 
 
 def create_architect_agent(
@@ -57,6 +63,7 @@ def create_architect_agent(
 
     tool_node = ToolNode(tools=tools)
     graph_builder.add_node("tools", tool_node)
+    graph_builder.add_node("answer_generator", answer_generator)
 
     graph_builder.add_edge(START, "initial_prompt")
     graph_builder.add_edge("initial_prompt", "agent")
@@ -67,11 +74,23 @@ def create_architect_agent(
         {"tools": "tools", "end": END},
     )
 
-    graph_builder.add_edge("tools", "agent")
+    graph_builder.add_edge("tools", "answer_generator")
+    graph_builder.add_edge("answer_generator", "agent")
     graph = graph_builder.compile()
     graph.name = name
 
     return graph
+
+
+def answer_generator(state: ArchitectState) -> dict:
+    last_tool_call = state["messages"][-1]
+    if last_tool_call and last_tool_call.tool_calls:
+        for tool_call in last_tool_call.tool_calls:
+            if tool_call["name"] == "final_answer":
+                branch_name = tool_call["args"].get("branch_name")
+                if branch_name:
+                    return {"architect_result": ArchitectAgentResult(main_branch=branch_name)}
+    return {}
 
 
 def _create_initial_prompt(state: ArchitectState) -> dict:
@@ -100,7 +119,11 @@ def _create_initial_prompt(state: ArchitectState) -> dict:
     {git_url}
     </git_url>
     """
-    return {"messages": [HumanMessage(content=plan_text)]}
+    return {
+        "messages": [HumanMessage(content=plan_text)],
+        "branch_name": branch_name,
+        "dev_rules": dev_rules
+    }
 
 
 def _read_rules_file(file_name: str) -> str:

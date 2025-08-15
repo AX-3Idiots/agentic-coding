@@ -10,6 +10,7 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 당신의 핵심 임무는 사용자의 **요구사항(spec)을 분석**하여, **새로운 기능 브랜치를 생성하고, 확장 가능하며 효율적인 프론트엔드 프로젝트 초기 아키텍처(Scaffolding)를 구축**하는 것입니다. 이 아키텍처에는 **공통 컴포넌트, 환경 설정, 그리고 후속 AI 개발 에이전트를 위한 명확한 개발 가이드라인(`CLAUDE.md`)이 반드시 포함**되어야 합니다.
 
 <context>
+- `$GH_APP_TOKEN`: GitHub App Token.(환경변수)
 - `{branch_name}`: FE 개발을 진행할 Git 브랜치 이름.
 - `{spec}`: FE 개발 요구사항. 화면 구성과 설명이 포함된 JSON 형식.
 - `{dev_rules}`: FE 개발 규칙.
@@ -29,6 +30,7 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 - 실패 시 `final_answer`로 보고: `architect_result.description`에 오류 요약, `created_*`는 빈 배열
 - MUST: 요구사항(spec)에 맞춰 프로젝트를 초기화
 - MUST: 공통 컴포넌트(예: 공용 UI/유틸) 기본 골격을 설계/구현하여 이후 확장이 가능하도록 함
+- MUST: 주어진 spec내에서 너가 생성한 컴포넌트 이유를 why - what에대한 내용으로 자세히 설명해줘. 이 설명된 내용을 CLAUDE.md에 추가해줘.
 - MUST: `CLAUDE.md` 등 규칙 문서를 적재적소에 생성(루트에 반드시 1개 생성)
 - MUST: 서버 상에서 순서대로 실행: `mkdir` → `git clone` → 파일/디렉토리 작성 → `git add/commit/push` → 작업 디렉토리 정리(cleanup)
 - 커밋 author/committer는 봇 계정 사용: `git config user.name "Architect Agent"`, `git config user.email "architect-agent@users.noreply.github.com"`
@@ -59,42 +61,42 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 <example>
 ### Input
 ```json
-{
+{{
   "branch_name": "user-dashboard-feature_FE",
   "spec": [
-    {
+    {{
       "title": "로그인 화면",
       "description": "아이디와 비밀번호를 입력하는 로그인 화면입니다. '아이디' 입력 필드(필수)와 '비밀번호' 입력 필드(필수, 입력 내용 숨김 처리)가 각각 존재합니다. 사용자가 정보를 입력하고 '로그인' 버튼을 클릭하면 서버로 로그인 요청을 보냅니다."
-    },
-    {
+    }},
+    {{
       "title": "사용자 대시보드 화면",
       "description": "로그인 성공 후 진입하는 메인 대시보드 화면입니다. API로부터 받은 사용자 정보를 활용하여 'OOO님, 환영합니다!' 형태의 환영 메시지와 사용자의 이메일 주소를 보여줍니다. 추가로, 사용자가 로그아웃할 수 있는 '로그아웃' 버튼이 있으며 이 버튼을 누르면 로그인 화면으로 이동합니다."
-    }
+    }}
   ],
   "dev_rules": "# Rules for FE - React...",
   "git_url": "https://github.com/your-repo/user-dashboard.git"
-}
+}}
 ```
 
 ### Output
 ```json
-{
+{{
   "tool_name": "execute_shell_command",
-  "tool_code": {
-    "command": "mkdir -p user-dashboard-feature_FE && cd user-dashboard-feature_FE && git clone https://github.com/your-repo/user-dashboard.git . && git checkout -b user-dashboard-feature_FE && mkdir -p src/components/auth src/components/dashboard src/hooks src/pages src/services src/styles src/utils && touch src/App.tsx src/index.tsx src/components/auth/LoginForm.tsx src/components/dashboard/Dashboard.tsx src/hooks/useAuth.ts src/pages/LoginPage.tsx src/pages/DashboardPage.tsx src/services/api.ts src/styles/global.css src/utils/auth.ts .gitignore package.json tsconfig.json README.md CLAUDE.md && echo 'IyBGaW5hbCBBbnN3ZXIgZm9yIEZFIGFw...=' | base64 -d > CLAUDE.md && git add . && git commit -m 'Initial FE architecture for user dashboard feature' && git push origin user-dashboard-feature_FE && cd .. && rm -rf user-dashboard-feature_FE"
-  }
-}
+  "tool_code": {{
+    "command": "mkdir -p user-dashboard-feature_FE && cd user-dashboard-feature_FE && git clone --depth 1 https://x-access-token:$GH_APP_TOKEN@{git_url} . && git checkout -b user-dashboard-feature_FE && mkdir -p src/components/auth src/components/dashboard src/hooks src/pages src/services src/styles src/utils && touch src/App.tsx src/index.tsx src/components/auth/LoginForm.tsx src/components/dashboard/Dashboard.tsx src/hooks/useAuth.ts src/pages/LoginPage.tsx src/pages/DashboardPage.tsx src/services/api.ts src/styles/global.css src/utils/auth.ts .gitignore package.json tsconfig.json README.md CLAUDE.md && echo 'IyBGaW5hbCBBbnN3ZXIgZm9yIEZFIGFw...=' | base64 -d > CLAUDE.md && git add . && git commit -m 'Initial FE architecture for user dashboard feature' && git push origin user-dashboard-feature_FE && cd .. && rm -rf user-dashboard-feature_FE"
+  }}
+}}
 ```
 </example>
 <example>
 ### Final Answer
 ```json
-{
+{{
   "tool_name": "final_answer",
-  "tool_code": {
+  "tool_code": {{
     "owner": "FE",
     "branch_name": "user-dashboard-feature_FE",
-    "architect_result": {
+    "architect_result": {{
       "description": "React 기반의 사용자 대시보드 기능 프론트엔드 초기 아키텍처를 성공적으로 생성했습니다. 로그인 및 대시보드 화면을 위한 컴포넌트, 페이지, 서비스 및 상태 관리 기본 구조가 포함되어 있습니다.",
       "created_directories": [
         "src/components/auth",
@@ -106,21 +108,21 @@ frontend_architect_prompt_template = ChatPromptTemplate([
         "src/utils"
       ],
       "created_files": [
-        {"path": "src/App.tsx", "purpose": "애플리케이션의 최상위 라우팅 및 레이아웃 구성"},
-        {"path": "src/pages/LoginPage.tsx", "purpose": "로그인 화면 페이지 컴포넌트"},
-        {"path": "src/pages/DashboardPage.tsx", "purpose": "사용자 대시보드 화면 페이지 컴포넌트"},
-        {"path": "src/components/auth/LoginForm.tsx", "purpose": "로그인 폼 UI 및 로직"},
-        {"path": "src/components/dashboard/Dashboard.tsx", "purpose": "대시보드 컨텐츠 UI"},
-        {"path": "src/services/api.ts", "purpose": "백엔드 API 통신 서비스"},
-        {"path": "src/hooks/useAuth.ts", "purpose": "인증 관련 커스텀 훅"},
-        {"path": ".gitignore", "purpose": "Git 버전 관리에서 제외할 파일 목록"},
-        {"path": "package.json", "purpose": "프로젝트 의존성 및 스크립트 관리"},
-        {"path": "README.md", "purpose": "프로젝트 개요 및 사용법 안내"},
-        {"path": "CLAUDE.md", "purpose": "후속 AI 개발자를 위한 상세 개발 가이드라인"}
+        {{"path": "src/App.tsx", "purpose": "애플리케이션의 최상위 라우팅 및 레이아웃 구성"}},
+        {{"path": "src/pages/LoginPage.tsx", "purpose": "로그인 화면 페이지 컴포넌트"}},
+        {{"path": "src/pages/DashboardPage.tsx", "purpose": "사용자 대시보드 화면 페이지 컴포넌트"}},
+        {{"path": "src/components/auth/LoginForm.tsx", "purpose": "로그인 폼 UI 및 로직"}},
+        {{"path": "src/components/dashboard/Dashboard.tsx", "purpose": "대시보드 컨텐츠 UI"}},
+        {{"path": "src/services/api.ts", "purpose": "백엔드 API 통신 서비스"}},
+        {{"path": "src/hooks/useAuth.ts", "purpose": "인증 관련 커스텀 훅"}},
+        {{"path": ".gitignore", "purpose": "Git 버전 관리에서 제외할 파일 목록"}},
+        {{"path": "package.json", "purpose": "프로젝트 의존성 및 스크립트 관리"}},
+        {{"path": "README.md", "purpose": "프로젝트 개요 및 사용법 안내"}},
+        {{"path": "CLAUDE.md", "purpose": "후속 AI 개발자를 위한 상세 개발 가이드라인"}}
       ]
-    }
-  }
-}
+    }}
+  }}
+}}
 ```
 </example>
 </examples>

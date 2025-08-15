@@ -34,6 +34,7 @@ from pathlib import Path
 from ..agents.graph import create_custom_react_agent
 from langchain_core.tools import tool
 from langgraph.types import interrupt
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 
 load_dotenv()
 
@@ -224,7 +225,7 @@ async def architect(state: OverallState):
             payload,
             config={
                 "recursion_limit": 100,
-                "callbacks": [get_langfuse_client().start_trace(name=f"architect_agent_{owner.lower()}")]
+                "callbacks": [LangfuseCallbackHandler()]
             },
             max_retries=7,
             base_delay=0.6,
@@ -238,9 +239,11 @@ async def architect(state: OverallState):
     latest_messages = []
     for result in results:
         msgs = result.get("messages", []) if isinstance(result, dict) else []
-        if isinstance(msgs, list) and msgs:
-            latest_messages.append(msgs[-1])
-            print(latest_messages)
+        if isinstance(msgs, list):
+            latest_messages.extend(msgs)
+
+        res = result['architect_result']
+        print(res)
     return {
         "messages": latest_messages
     }
