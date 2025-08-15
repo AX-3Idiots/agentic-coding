@@ -11,12 +11,13 @@ from .solution_owner_prompts import *
 
 __all__ = [
     "solution_owner_prompts_v1",
+    "solution_owner_prompts_v2",
     "role_allocate_prompts",
     "architect_agent_prompts",
     "se_agent_prompts",
     "resolver_prompts",
     "conflict_prompts",
     "frontend_architect_agent_prompts",
-    "backend_architect_agent_prompts"
+    "backend_architect_agent_prompts",
 ]
 

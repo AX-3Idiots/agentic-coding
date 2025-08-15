@@ -193,10 +193,10 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
     data = parse_final_answer_with_langchain(result['messages'][-1].content)
     return {
         "messages": result['messages'],
-        "project_name": data['project_name'],
-        "summary": data['summary'],
-        "fe_spec": data['fe_spec'],
-        "be_spec": data['be_spec']
+        "project_name": data.get('project_name', ''),
+        "summary": data.get('summary', ''),
+        "fe_spec": data.get('fe_spec', []),
+        "be_spec": data.get('be_spec', [])
     }
 
 async def architect(state: OverallState):
@@ -231,6 +231,7 @@ async def architect(state: OverallState):
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
+            "branch_name": f"{state.get("project_name", "sample_project")}_{owner}"
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
