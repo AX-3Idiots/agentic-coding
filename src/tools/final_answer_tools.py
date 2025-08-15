@@ -7,12 +7,7 @@ import json
 class FinalAnswerInput(BaseModel):
     """Input schema for the final_answer tool matching the prompt contract."""
 
-    owner: Optional[str] = Field(default=None, description="Project owner such as 'FE' or 'BE'.")
     branch_name: Optional[str] = Field(default=None, description="Name of the branch created for this work.")
-    architect_result: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Structured execution summary (created files/dirs, notes, etc.).",
-    )
 
 
 class FinalAnswerTool(BaseTool):
