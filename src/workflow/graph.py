@@ -231,6 +231,7 @@ async def architect(state: OverallState):
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
+            "branch_name": f"{state.get("project_name", "sample_project")}_{owner}"
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
