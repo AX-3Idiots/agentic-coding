@@ -12,7 +12,7 @@ from langfuse import get_client
 import random
 from src.prompts import (
     solution_owner_prompts_v1,
-    allocate_role_v1
+    solution_owner_prompts_v2
 )
 import os
 from dotenv import load_dotenv
@@ -78,7 +78,7 @@ def human_assistance(query: str) -> str:
 solution_owner_agent = create_custom_react_agent(
     model=llm,
     tools=[human_assistance],
-    prompt=solution_owner_prompts_v1.prompt,
+    prompt=solution_owner_prompts_v2.prompt,
     name="solution_owner_agent"
 )
 
@@ -136,7 +136,10 @@ parser = JsonOutputParser()
 def parse_final_answer_with_langchain(text: str):
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
-        raise ValueError("No <final_answer>...</final_answer> found")
+        try:
+            return parser.parse(text)
+        except Exception as e:
+            raise ValueError("No <final_answer>...</final_answer> found")
     return parser.parse(m.group(1).strip())
 
 async def main():    
@@ -153,10 +156,10 @@ async def main():
         )
         data = parse_final_answer_with_langchain(result['messages'][-1].content)
         print({
-            "project_name": data['project_name'],
-            "summary": data['summary'],
-            "fe_spec": data['fe_spec'],
-            "be_spec": data['be_spec']
+            "project_name": data.get('project_name', ''),
+            "summary": data.get('summary', ''),
+            "fe_spec": data.get('fe_spec', []),
+            "be_spec": data.get('be_spec', [])
         })
 
 if __name__ == "__main__":

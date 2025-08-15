@@ -149,7 +149,10 @@ resolver_agent = create_resolver_agent(
 def parse_final_answer_with_langchain(text: str):
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
-        raise ValueError("No <final_answer>...</final_answer> found")
+        try:
+            return parser.parse(text)
+        except Exception as e:
+            raise ValueError("No <final_answer>...</final_answer> found")
     return parser.parse(m.group(1).strip())
 
 async def solution_owner(state: OverallState, config: RunnableConfig):
@@ -193,10 +196,10 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
     data = parse_final_answer_with_langchain(result['messages'][-1].content)
     return {
         "messages": result['messages'],
-        "project_name": data['project_name'],
-        "summary": data['summary'],
-        "fe_spec": data['fe_spec'],
-        "be_spec": data['be_spec']
+        "project_name": data.get('project_name', ''),
+        "summary": data.get('summary', ''),
+        "fe_spec": data.get('fe_spec', []),
+        "be_spec": data.get('be_spec', [])
     }
 
 async def architect(state: OverallState):
@@ -214,29 +217,9 @@ async def architect(state: OverallState):
             response message and potentially refined 'main_goals'.
             Note: The return statement is currently commented out.
     """
-    # fe_spec = state.get("fe_spec")
-    # be_spec = state.get("be_spec")
-    fe_spec = state.get("fe_spec", [
-        {
-            "title": "로그인 화면",
-            "description": "아이디와 비밀번호를 입력하는 로그인 화면입니다. '아이디' 입력 필드(필수)와 '비밀번호' 입력 필드(필수, 입력 내용 숨김 처리)가 각각 존재합니다. 사용자가 정보를 입력하고 '로그인' 버튼을 클릭하면 서버로 로그인 요청을 보냅니다."
-        },
-        {
-            "title": "사용자 대시보드 화면",
-            "description": "로그인 성공 후 진입하는 메인 대시보드 화면입니다. API로부터 받은 사용자 정보를 활용하여 'OOO님, 환영합니다!' 형태의 환영 메시지와 사용자의 이메일 주소를 보여줍니다. 추가로, 사용자가 로그아웃할 수 있는 '로그아웃' 버튼이 있으며 이 버튼을 누르면 로그인 화면으로 이동합니다."
-        }
-    ])
+    fe_spec = state.get("fe_spec")
+    be_spec = state.get("be_spec")
 
-    be_spec = state.get("be_spec", [
-        {
-            "endpoint": "POST /auth/login",
-            "description": "사용자 인증을 처리합니다. 요청 body에는 `username`(string)과 `password`(string) 필드를 필수로 포함해야 합니다. 인증 성공 시, 상태 코드 200과 함께 `{ \"accessToken\": \"JWT_TOKEN_STRING\" }` 형식의 토큰을 반환합니다. 아이디나 비밀번호가 틀릴 경우, 상태 코드 401과 `{ \"error\": \"Invalid credentials\" }` 메시지를 반환합니다."
-        },
-        {
-            "endpoint": "GET /users/me",
-            "description": "현재 로그인된 사용자의 정보를 조회합니다. 반드시 요청 헤더에 `Authorization: Bearer {accessToken}` 형식의 유효한 토큰을 포함해야 합니다. 성공 시, 상태 코드 200과 `{ \"username\": \"유저이름\", \"email\": \"유저이메일\" }` 형식의 사용자 정보를 반환합니다. 토큰이 유효하지 않은 경우, 상태 코드 403과 `{ \"error\": \"Forbidden\" }` 메시지를 반환합니다."
-        }
-    ])
     specs_to_process = []
     if fe_spec:
         specs_to_process.append(("FE", fe_spec))
@@ -253,7 +236,7 @@ async def architect(state: OverallState):
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
-            "branch_name": f"{state.get('project_name','sample2_project')}_{owner}",
+            "branch_name": f"{state.get("project_name", "sample_project")}_{owner}"
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent

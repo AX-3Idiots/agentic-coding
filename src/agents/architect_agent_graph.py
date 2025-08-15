@@ -112,6 +112,7 @@ def _create_initial_prompt(state: ArchitectState) -> dict:
     dev_rules = _build_dev_rules_text(owner)
     branch_name = state.get('branch_name')
 
+
     plan_text = f"""
     <branch_name>
     {branch_name}
