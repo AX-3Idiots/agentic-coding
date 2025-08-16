@@ -136,8 +136,13 @@ async def stream_workflow_v2(request: Request):
         async for event in events_iter:            
             try:                
                 obj = event
+                
+                # Filter out on_chat_model_stream events
+                event_type = getattr(obj, "event", None) or obj.get("event") if isinstance(obj, dict) else None
+                if event_type == "on_chat_model_stream":
+                    continue
+                    
                 # if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
-                #     print("gotcha")
                 #     obj = {
                 #         "event": "on_tool_start", 
                 #         "tool_name": "human_assistance", 
