@@ -36,7 +36,7 @@ resolver_prompt_template = ChatPromptTemplate([
     **1. 환경 설정**
         - `mkdir ./test_{branch_name}`: 디렉토리를 새로 생성합니다.
         - `cd ./test_{branch_name}`: 생성된 디렉터리로 이동합니다.
-        - `git clone --depth 1 https://x-access-token:$GH_APP_TOKEN@{git_url} .`: Git 저장소를 클론합니다.
+        - URL을 정리하고 Git 저장소를 클론합니다: `CLEAN_URL=$(echo "{git_url}" | sed -e 's|https://||' -e 's|http://||'); git clone --depth 1 "https://x-access-token:$GH_APP_TOKEN@$CLEAN_URL" .`
         - `git checkout {branch_name}`: 대상 브랜치로 전환합니다.
 
     **2. 병합 충돌 해결**
@@ -51,11 +51,12 @@ resolver_prompt_template = ChatPromptTemplate([
 
     **3. 실행 및 오류 처리**
         - `cat README.md`: `README.md` 파일을 읽고 프로젝트 실행 방법을 파악합니다.
-        - `README.md`의 가이드에 따라 의존성을 설치하고 프로젝트를 실행합니다.
+        - `README.md`의 가이드에 따라 `uv sync`를 사용하여 의존성을 설치합니다. Architect 에이전트가 생성한 `uv.lock` 파일을 신뢰하고 먼저 사용합니다.
+        - `README.md`의 가이드에 따라 프로젝트를 실행합니다.
         - **실행 실패 시**:
             - `README.md`의 실행 명령어가 정확하지 않을 수 있습니다. 프로젝트의 종류를 파악하고 일반적인 실행 명령어를 시도해 보세요. (예: FastAPI 프로젝트의 경우 `uvicorn app.main:app --reload`)
-            - 그래도 실패한다면, 오류 메시지를 분석하여 원인을 파악합니다.
-            - `CodeConflictResolverTool`을 사용하여 오류가 발생한 코드를 수정합니다. (tool_input으로 `file_path`, `file_content`, `error_context`(실패 시 STDERR 내용), `requirement`를 제공)
+            - **만약 `pydantic` 관련 `ModuleNotFoundError`가 발생했다면**, 1차 방어가 실패한 것이므로 복구 절차를 시작합니다: `uv pip install -U pydantic pydantic-settings`를 실행하여 의존성을 강제로 업그레이드한 후, 다시 `uv sync`를 시도합니다.
+            - 다른 종류의 오류라면, 오류 메시지를 분석하여 `CodeConflictResolverTool`을 사용하여 코드를 수정합니다.
             - 코드를 수정한 후, 다시 실행을 시도합니다. 성공할 때까지 이 과정을 반복합니다.
             - 계속 내용이 반복된다면 10회까지만하고 중단하세요.
         - **실행 성공 시**:
@@ -119,14 +120,14 @@ resolver_prompt_template = ChatPromptTemplate([
     </action>
 
     <thought>
-    이제 작업 디렉터리 안에서 Git 저장소를 클론해야 합니다. `git_url`과 환경 변수 `GH_APP_TOKEN`을 사용하여 클론하겠습니다.
+    이제 작업 디렉터리 안에서 Git 저장소를 클론해야 합니다. `git_url`에 프로토콜이 포함되어 있을 수 있으니, `sed` 명령어를 사용하여 URL을 정리하고 클론 명령을 실행하겠습니다.
     </thought>
     <action>
     ```json
     {{
       "tool": "ExecuteShellCommandTool",
       "tool_input": {{
-        "command": "git clone --depth 1 https://x-access-token:$GH_APP_TOKEN@{git_url} ."
+        "command": "CLEAN_URL=$(echo \"{git_url}\" | sed -e 's|https://||' -e 's|http://||'); git clone --depth 1 \"https://x-access-token:$GH_APP_TOKEN@$CLEAN_URL\" ."
       }}
     }}
     ```

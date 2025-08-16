@@ -36,6 +36,7 @@ backend_architect_prompt_template = ChatPromptTemplate([
 - MUST: `CLAUDE.md` 등 규칙 문서를 적재적소에 생성(루트에 반드시 1개 생성)
 - MUST: 서버 상에서 순서대로 실행: `mkdir` → `git clone` → 파일/디렉토리 작성 → `git add/commit/push` → 작업 디렉토리 정리(cleanup)
 - MUST: **Pydantic V2+ 호환성**: 환경 변수 설정에는 `pydantic`의 `BaseSettings` 대신 `pydantic-settings` 패키지를 사용해야 합니다. `pyproject.toml` 의존성에 `"pydantic-settings"`를 추가하고, 설정 파일(`app/core/config.py` 등)에서는 `from pydantic_settings import BaseSettings`를 사용해야 합니다. **의존성 추가 시에는 버전 호환성을 위해 `"pydantic>=2.0"` 및 `"pydantic-settings>=2.0"`와 같이 최소 버전을 명시해야 합니다.**
+- MUST: **의존성 설치 및 고정**: `pyproject.toml` 파일을 작성한 직후, 그리고 `git add`를 실행하기 전에, **반드시 `uv pip install -U pydantic pydantic-settings && uv sync` 명령어를 실행**하여 핵심 의존성을 최신 호환 버전으로 설치하고 `uv.lock` 파일을 생성해야 합니다. 이는 버전 충돌을 원천적으로 방지합니다.
 - MUST: **Hatch 빌드 설정**: 소스 코드가 `app` 디렉터리에 있으므로, `pyproject.toml`의 `[tool.hatch.build.targets.wheel]` 테이블에 `packages = ["app"]` 설정을 추가하여 패키징 경로를 명시적으로 지정해야 합니다.
 - 커밋 author/committer는 봇 계정 사용: `git config user.name "Architect Agent"`, `git config user.email "architect-agent@users.noreply.github.com"`
 - 마지막 출력은 순수 JSON 하나만 포함해야 하며, 코드펜스/설명 텍스트를 포함하지 않습니다. 반드시 `final_answer` 도구 형식과 호환되어야 합니다.
@@ -49,6 +50,9 @@ backend_architect_prompt_template = ChatPromptTemplate([
   - 빈 디렉토리는 `.gitkeep`으로 표시
   - 멀티라인 콘텐츠는 꼭 필요한 파일에 한해서만 생성(주로 `CLAUDE.md`)
   - VERY IMPORTANT: Your final output MUST be a call to the `final_answer` tool. Do NOT provide any summary, description, or explanatory text in your final response. Your job is to execute the commands and report the branch name via the tool.
+- **FastAPI 애플리케이션 안정성 규칙**:
+  - MUST: **기본 라우터 생성**: `app/main.py` 파일에는 반드시 `app = FastAPI()` 인스턴스를 생성하고, `@app.get("/")` 데코레이터를 사용한 기본 엔드포인트를 포함해야 합니다. 이 엔드포인트는 서버가 정상적으로 실행 중인지 확인하는 데 사용됩니다. (예: `async def root(): return {{\"message\": \"Server is running\"}}`)
+  - MUST: **API 문서 확인 명시**: `README.md` 파일의 서버 실행 방법 설명 아래에, `uvicorn`으로 서버를 실행한 후 브라우저에서 `http://localhost:8000/docs`에 접속하여 FastAPI의 자동 생성 API 문서를 확인하는 단계를 반드시 포함해야 합니다. 이는 서버가 정상적으로 요청을 처리하고 문서를 생성할 수 있는지 검증하는 핵심 절차입니다.
 - **선택적 의존성 규칙**:
   - 요구사항(`spec`) 분석 시, 이메일 주소, URL, 데이터베이스 드라이버 등 특정 데이터 형식의 유효성 검사나 기능이 필요한지 확인해야 합니다.
   - `pydantic`과 같은 라이브러리는 이런 추가 기능을 위해 선택적 의존성(optional dependency)을 요구할 수 있습니다.
