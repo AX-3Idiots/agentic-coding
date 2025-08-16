@@ -21,7 +21,7 @@ frontend_architect_prompt_template = ChatPromptTemplate([
 <rules>
 - 모든 작업은 `{branch_name}` 하위에서 수행
 - 모든 경로는 `{branch_name}` 루트를 기준으로 합니다.
-- [**IMPORTANT**] 프론트엔드 아키텍처만 생성하며, `frontend/` 경로에 있는 파일이나 디렉토리만 생성합니다.
+- [**IMPORTANT**] 생성하는 모든 파일과 디렉토리는 {branch_name} 디렉토리 내에 직접 위치해야 합니다. 별도의 'frontend' 하위 디렉토리를 만들지 마십시오.
 - 명령은 반드시 하나의 셸 라인으로 `&&` 연결
 - 도구 호출 시 필수 인자 없으면 호출 금지
   - execute_shell_command: `command` 필수
