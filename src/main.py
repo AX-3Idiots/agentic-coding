@@ -54,7 +54,7 @@ async def stream_workflow(request: Request):
             "messages": [HumanMessage(content=request.input)],
             "base_url": request.git_url,
         }
-        cfg = {"callbacks": [callback_handler]}
+        cfg = {"configurable": {"thread_id": str(uuid.uuid4())}, "callbacks": [callback_handler, langfuse_callback_handler]}
 
         # Choose the best available stream API, but iterate with one unified loop
         events_iter = (
