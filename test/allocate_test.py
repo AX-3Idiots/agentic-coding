@@ -91,7 +91,6 @@ def human_assistance(query: str) -> str:
     # return human_response["data"]
     return "Just assume the safe default for the archetype and requirements for software development."
 
-@tool
 async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]]):
     """A placeholder node for the software engineer agents' work.
 
@@ -171,12 +170,6 @@ backend_architect_agent = create_architect_agent(
     name="backend_architect_agent"
 )
 
-role_allocate_agent = create_custom_react_agent(
-    model=llm,
-    tools=[spawn_engineers_tool],
-    prompt=allocate_role_v2.prompt,
-    name="role_allocate_agent"
-)
 
 async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.5, **kwargs):
     """
@@ -351,6 +344,25 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
             decision message and the `sub_goals` mapped to specific roles.
             Note: The return statement is currently commented out.
     """
+    fe_branch = state.get("fe_branch_name")
+    be_branch = state.get("be_branch_name")
+
+    @tool
+    async def spawn_fe_engineers(base_url: str, specs_list: list[list[dict]]):
+        """Spawns frontend engineers to work on the frontend branch."""
+        return await spawn_engineers(base_url, fe_branch, specs_list)
+
+    @tool
+    async def spawn_be_engineers(base_url: str, specs_list: list[list[dict]]):
+        """Spawns backend engineers to work on the backend branch."""
+        return await spawn_engineers(base_url, be_branch, specs_list)
+
+    role_allocate_agent = create_custom_react_agent(
+        model=llm,
+        tools=[spawn_fe_engineers, spawn_be_engineers],
+        prompt=allocate_role_v2.prompt,
+        name="role_allocate_agent"
+    )
     result = await role_allocate_agent.ainvoke({
         'messages': state['messages'],
         'intermediate_steps': [],
