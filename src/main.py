@@ -136,25 +136,25 @@ async def stream_workflow_v2(request: Request):
         async for event in events_iter:            
             try:                
                 obj = event
-                if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
-                    print("gotcha")
-                    obj = {
-                        "event": "on_tool_start", 
-                        "tool_name": "human_assistance", 
-                        "langgrah_node": "tools", 
-                        "data": obj.data
-                    }
-                if obj["event"] == "on_chat_model_stream":
-                    print(obj)
-                    chunk = event["data"].get("chunk")
-                    if chunk and hasattr(chunk, "content"):
-                        content = chunk.content
-                        if content:
-                            # Serialize the content directly to NDJSON
-                            obj = {
-                                "data": content,
-                            }
-                            # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                   
+                # if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
+                #     print("gotcha")
+                #     obj = {
+                #         "event": "on_tool_start", 
+                #         "tool_name": "human_assistance", 
+                #         "langgrah_node": "tools", 
+                #         "data": obj.data
+                #     }
+                # if obj["event"] == "on_chat_model_stream":
+                #     print(obj)
+                #     chunk = event["data"].get("chunk")
+                #     if chunk and hasattr(chunk, "content"):
+                #         content = chunk.content
+                #         if content:
+                #             # Serialize the content directly to NDJSON
+                #             obj = {
+                #                 "data": content,
+                #             }
+                #             # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                   
                 yield (json.dumps(obj, ensure_ascii=False, cls=MessageEncoder) + "\n").encode("utf-8")
             except Exception as e:
                 print(e)
