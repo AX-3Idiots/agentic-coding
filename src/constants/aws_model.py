@@ -82,7 +82,8 @@ class AWSModel(str, Enum):
             cls.COHERE_COMMAND_CROSS_REGION,
             cls.COHERE_COMMAND_LIGHT_CROSS_REGION,
             cls.ANTHROPIC_CLAUDE_4_SONNET_CROSS_REGION,
-            cls.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION
+            cls.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
+            cls.ANTHROPIC_CLAUDE_OPUS_4_1_CROSS_REGION
         ]
 
     @classmethod

@@ -92,11 +92,8 @@ def human_assistance(query: str) -> str:
     return "Just assume the safe default for the archetype and requirements for software development."
 
 async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]]):
-    """A placeholder node for the software engineer agents' work.
-
-    In a complete implementation, this node would likely be replaced by a
-    dynamic dispatcher or multiple individual engineer agent nodes. It is
-    invoked after role allocation to carry out the development tasks.
+    """Spawn a container for each job and clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
 
     Args:
         base_url (str): The base URL of the repository.
@@ -139,9 +136,9 @@ async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list
     try:
         results = await asyncio.to_thread(
             spawn_engineers_tool,
-            base_url=base_url,
+            git_url=base_url,
             branch_name=branch_name,
-            specs_list=specs_list,
+            jobs=specs_list,
         )
     except Exception:
         # Swallow errors here to avoid crashing the graph; downstream resolver can proceed
@@ -349,12 +346,28 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
 
     @tool
     async def spawn_fe_engineers(base_url: str, specs_list: list[list[dict]]):
-        """Spawns frontend engineers to work on the frontend branch."""
+        """Spawns frontend engineers to work on the frontend branch. And clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
+    Args:
+        base_url (str): The base URL of the repository.
+        specs_list (list[list[dict]]): The grouped specs to spawn engineers for.
+    Returns:
+        dict: A dictionary containing the agent results.
+    """
+        print(f"Spawning frontend engineers for {fe_branch} with {specs_list}")
         return await spawn_engineers(base_url, fe_branch, specs_list)
 
     @tool
     async def spawn_be_engineers(base_url: str, specs_list: list[list[dict]]):
-        """Spawns backend engineers to work on the backend branch."""
+        """Spawns backend engineers to work on the backend branch. And clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
+    Args:
+        base_url (str): The base URL of the repository.
+        specs_list (list[list[dict]]): The grouped specs to spawn engineers for.
+    Returns:
+        dict: A dictionary containing the agent results.
+    """
+        print(f"Spawning backend engineers for {be_branch} with {specs_list}")
         return await spawn_engineers(base_url, be_branch, specs_list)
 
     role_allocate_agent = create_custom_react_agent(
@@ -397,8 +410,7 @@ async def main():
                     "configurable": {"thread_id": str(uuid.uuid4())},
                     "callbacks": [lf_cb]
                 }
-            )
-            print(result)
+            )            
 
 if __name__ == "__main__":
     asyncio.run(main())

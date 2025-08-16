@@ -139,6 +139,7 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]]) -> l
                 "SYSTEM_PROMPT": system_prompt,
                 "USER_INPUT": user_input,
                 "TIME_OUT": TIME_OUT,
+                "BRANCH_NAME": branch_name,
                 "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
                 "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
