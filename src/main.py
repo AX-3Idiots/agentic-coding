@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .logging_config import setup_logging
 from dotenv import load_dotenv
@@ -25,6 +26,15 @@ app = FastAPI(
     description="Agentic Coding",
     default_response_class=JSONResponse,
     lifespan=git_config
+)
+
+# CORS 설정 추가
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 개발용: 모든 origin 허용
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 HTTP 메서드 허용
+    allow_headers=["*"],  # 모든 헤더 허용
 )
 
 class Request(BaseModel):
