@@ -56,23 +56,23 @@ def create_architect_agent(
 
     graph_builder = StateGraph(ArchitectState)
     graph_builder.add_node("initial_prompt", _create_initial_prompt)
-    graph_builder.add_node("agent", agent)
+    graph_builder.add_node(name, agent)
 
     tool_node = ToolNode(tools=tools)
     graph_builder.add_node("tools", tool_node)
     graph_builder.add_node("answer_generator", answer_generator)
 
     graph_builder.add_edge(START, "initial_prompt")
-    graph_builder.add_edge("initial_prompt", "agent")
+    graph_builder.add_edge("initial_prompt", name)
 
     graph_builder.add_conditional_edges(
-        "agent",
+        name,
         _tools_condition,
         {"tools": "tools", "end": END},
     )
 
     graph_builder.add_edge("tools", "answer_generator")
-    graph_builder.add_edge("answer_generator", "agent")
+    graph_builder.add_edge("answer_generator", name)
     graph = graph_builder.compile()
     graph.name = name
 

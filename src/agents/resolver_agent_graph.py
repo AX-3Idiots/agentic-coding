@@ -85,24 +85,24 @@ def create_resolver_agent(
 
     # 그래프의 각 노드를 정의합니다.
     graph_builder.add_node("initial_prompt", _create_initial_prompt)
-    graph_builder.add_node("agent", agent)
+    graph_builder.add_node(name, agent)
     tool_node = ToolNode(tools=tools)
     graph_builder.add_node("tools", tool_node)
     graph_builder.add_node("answer_generator", answer_generator) # 필요 시 활성화
 
     # 그래프의 흐름(엣지)을 정의합니다.
     graph_builder.add_edge(START, "initial_prompt")
-    graph_builder.add_edge("initial_prompt", "agent")
+    graph_builder.add_edge("initial_prompt", name)
 
     # 'agent' 노드 이후에는 조건에 따라 분기합니다.
     graph_builder.add_conditional_edges(
-        "agent",
+        name,
         _tools_condition,
         # {"tools": "tools", END: END} 와 동일
     )
 
     # 'tools' 노드 실행 후에는 다시 'agent' 노드로 돌아가 다음 행동을 결정합니다.
-    graph_builder.add_edge("tools", "agent")
+    graph_builder.add_edge("tools", name)
     graph_builder.add_edge("answer_generator", END) # 필요 시 활성화
 
     # 그래프를 컴파일하여 실행 가능한 객체로 만듭니다.

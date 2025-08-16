@@ -26,18 +26,18 @@ def create_custom_react_agent(
         return {"messages": [result], "intermediate_steps": [result.content]}
 
     graph_builder = StateGraph(ToolState)
-    graph_builder.add_node("agent", agent)
+    graph_builder.add_node(name, agent)
 
     tool_node = ToolNode(tools=tools)
     graph_builder.add_node("tools", tool_node)
 
-    graph_builder.add_edge(START, "agent")
+    graph_builder.add_edge(START, name)
     graph_builder.add_conditional_edges(
-        "agent",
+        name,
         tools_condition,
     )
-    graph_builder.add_edge("tools", "agent")
-    graph_builder.add_edge("agent", END)
+    graph_builder.add_edge("tools", name)
+    graph_builder.add_edge(name, END)
     graph = graph_builder.compile()
     graph.name = name
 
