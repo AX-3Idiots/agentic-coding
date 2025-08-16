@@ -35,7 +35,7 @@ backend_architect_prompt_template = ChatPromptTemplate([
 - MUST: 주어진 spec내에서 너가 생성한 컴포넌트 이유를 why - what에대한 내용으로 자세히 설명해줘. 이 설명된 내용을 CLAUDE.md에 추가해줘.
 - MUST: `CLAUDE.md` 등 규칙 문서를 적재적소에 생성(루트에 반드시 1개 생성)
 - MUST: 서버 상에서 순서대로 실행: `mkdir` → `git clone` → 파일/디렉토리 작성 → `git add/commit/push` → 작업 디렉토리 정리(cleanup)
-- MUST: **Pydantic V2+ 호환성**: 환경 변수 설정에는 `pydantic`의 `BaseSettings` 대신 `pydantic-settings` 패키지를 사용해야 합니다. `pyproject.toml` 의존성에 `"pydantic-settings"`를 추가하고, 설정 파일(`app/core/config.py` 등)에서는 `from pydantic_settings import BaseSettings`를 사용해야 합니다.
+- MUST: **Pydantic V2+ 호환성**: 환경 변수 설정에는 `pydantic`의 `BaseSettings` 대신 `pydantic-settings` 패키지를 사용해야 합니다. `pyproject.toml` 의존성에 `"pydantic-settings"`를 추가하고, 설정 파일(`app/core/config.py` 등)에서는 `from pydantic_settings import BaseSettings`를 사용해야 합니다. **의존성 추가 시에는 버전 호환성을 위해 `"pydantic>=2.0"` 및 `"pydantic-settings>=2.0"`와 같이 최소 버전을 명시해야 합니다.**
 - MUST: **Hatch 빌드 설정**: 소스 코드가 `app` 디렉터리에 있으므로, `pyproject.toml`의 `[tool.hatch.build.targets.wheel]` 테이블에 `packages = ["app"]` 설정을 추가하여 패키징 경로를 명시적으로 지정해야 합니다.
 - 커밋 author/committer는 봇 계정 사용: `git config user.name "Architect Agent"`, `git config user.email "architect-agent@users.noreply.github.com"`
 - 마지막 출력은 순수 JSON 하나만 포함해야 하며, 코드펜스/설명 텍스트를 포함하지 않습니다. 반드시 `final_answer` 도구 형식과 호환되어야 합니다.
