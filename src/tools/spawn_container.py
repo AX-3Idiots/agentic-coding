@@ -124,7 +124,8 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
             "framework": "React", 
             "library": "Any",
             "fe_branch_name": branch_names.get("fe_branch_name"),
-            "be_branch_name": branch_names.get("be_branch_name")
+            "be_branch_name": branch_names.get("be_branch_name"),
+            "user_story": user_input
         }).messages[0].content
         
         volume = client.volumes.create(name=volume_name)
@@ -137,14 +138,14 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
             detach=True,
             environment={
                 "GIT_URL": git_url,
-                "AWS_REGION": os.environ["AWS_DEFAULT_REGION"],
+                "AWS_REGION": os.environ.get("AWS_DEFAULT_REGION", "ap-northeast-2"),
                 "CLAUDE_CODE_USE_BEDROCK": 1,
                 "ANTHROPIC_MODEL": AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION.value,
                 "SYSTEM_PROMPT": system_prompt,
                 "USER_INPUT": user_input,
                 "TIME_OUT": TIME_OUT,
-                "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
-                "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
+                "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
+                "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
                 "JOB_NAME": job.get("group_name"),
                 "INSTALLATION_ID": os.environ.get("INSTALLATION_ID"),

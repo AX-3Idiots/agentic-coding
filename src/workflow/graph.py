@@ -16,7 +16,7 @@ from ..tools.final_answer_tools import FinalAnswerTool
 from ..prompts import (
     architect_agent_prompts,
     dev_env_init_prompts,
-    dev_planning_prompts_v2,
+    dev_planning_prompts_v1,
     req_def_prompts,
     allocate_role_v1,
     resolver_prompts
@@ -227,7 +227,7 @@ async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.
 
 req_def_chain = req_def_prompts.prompt | llm | JsonOutputParser()
 dev_env_init_chain = dev_env_init_prompts.prompt | llm
-dev_planning_chain = dev_planning_prompts_v2.prompt | llm | JsonOutputParser()
+dev_planning_chain = dev_planning_prompts_v1.prompt | llm | JsonOutputParser()
 role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
 
 architect_agent = create_architect_agent(
