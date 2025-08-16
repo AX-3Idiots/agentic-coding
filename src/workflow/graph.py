@@ -15,10 +15,10 @@ from langfuse import get_client as get_langfuse_client
 import random
 from ..tools.final_answer_tools import FinalAnswerTool
 from ..prompts import (
-    solution_owner_prompts_v1,
+    solution_owner_prompts_v2,
     frontend_architect_agent_prompts,
     backend_architect_agent_prompts,
-    allocate_role_v1,
+    allocate_role_v2,
     resolver_prompts
 )
 import os
@@ -37,7 +37,13 @@ from langgraph.types import interrupt
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 import re
 
-load_dotenv()
+
+# Load .env from repo root explicitly and override to ensure keys are visible
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
+# Initialize callback; it reads LANGFUSE_* from environment
+langfuse = get_langfuse_client()  # uses env vars
+
+lf_cb = LangfuseCallbackHandler()
 
 class OverallState(TypedDict):
     """State for the overall graph."""
@@ -49,13 +55,9 @@ class OverallState(TypedDict):
     project_name: str
     fe_branch_name: str
     be_branch_name: str
-    fe_architect_result: dict[str, Any]
-    be_architect_result: dict[str, Any]
-    user_story_groups: list[dict[str, list[str] | str]]
-    agent_results: list[dict]
 
 config = Config(
-    read_timeout=900,
+    read_timeout=1800,
     connect_timeout=120,
     retries={
         "max_attempts": 8,
@@ -78,6 +80,92 @@ llm = ChatBedrockConverse(
 )
 
 parser = JsonOutputParser()
+
+@tool
+def human_assistance(query: str) -> str:
+    """
+    Use this tool when you need human assistance.
+    """
+    # human_response = interrupt({"query": query})
+    # return human_response["data"]
+    return "Just assume the safe default for the archetype and requirements for software development."
+
+async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]]):
+    """Spawn a container for each job and clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
+
+    Args:
+        base_url (str): The base URL of the repository.
+        branch_name (str): The branch name to spawn engineers for.
+        specs_list (list[dict]): The grouped specs to spawn engineers for.
+            For example:
+            specs_list = [
+                [
+                    {
+                        "title": "...",
+                        "description": "..."
+                    },
+                    ...
+                ],
+                [
+                    {
+                        "title": "...",
+                        "description": "..."
+                    },
+                    ...
+                ]
+                ...
+            ]
+
+    Returns:
+        agent_results: list[dict]: A list of dictionaries, each containing container_id, code, cost_usd, error, and log.
+        For example:
+            [
+                {
+                    "container_id": "1234567890",
+                    "code": "...",
+                    "cost_usd": "...",
+                    "error": "...",
+                    "log": "..."
+                }
+                ...
+        ]
+    """
+    # Run container spawning in a background thread and wait for completion
+    try:
+        results = await asyncio.to_thread(
+            spawn_engineers_tool,
+            git_url=base_url,
+            branch_name=branch_name,
+            jobs=specs_list,
+        )
+    except Exception:
+        # Swallow errors here to avoid crashing the graph; downstream resolver can proceed
+        results = []
+
+    return {"agent_results": results}
+
+solution_owner_agent = create_custom_react_agent(
+    model=llm,
+    tools=[human_assistance],
+    prompt=solution_owner_prompts_v2.prompt,
+    name="solution_owner_agent"
+)
+
+frontend_architect_agent = create_architect_agent(
+    model=llm,
+    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
+    prompt=frontend_architect_agent_prompts.prompt,
+    name="frontend_architect_agent"
+)
+
+backend_architect_agent = create_architect_agent(
+    model=llm,
+    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
+    prompt=backend_architect_agent_prompts.prompt,
+    name="backend_architect_agent"
+)
+
 
 async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.5, **kwargs):
     """
@@ -106,45 +194,6 @@ async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.
             raise
     # Final try
     return await func(*args, **kwargs)
-
-role_allocate_chain = allocate_role_v1.prompt | llm | JsonOutputParser()
-
-@tool
-def human_assistance(query: str) -> str:
-    """
-    Use this tool when you need human assistance.
-    """
-    # human_response = interrupt({"query": query})
-    # return human_response["data"]
-    return "Just assume the safe default for the archetype and requirements for software development."
-
-solution_owner_agent = create_custom_react_agent(
-    model=llm,
-    tools=[human_assistance],
-    prompt=solution_owner_prompts_v1.prompt,
-    name="solution_owner_agent"
-)
-
-frontend_architect_agent = create_architect_agent(
-    model=llm,
-    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
-    prompt=frontend_architect_agent_prompts.prompt,
-    name="frontend_architect_agent"
-)
-
-backend_architect_agent = create_architect_agent(
-    model=llm,
-    tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
-    prompt=backend_architect_agent_prompts.prompt,
-    name="backend_architect_agent"
-)
-
-resolver_agent = create_resolver_agent(
-    model=llm,
-    tools=[ExecuteShellCommandTool(),CodeConflictResolverTool(llm=llm)],
-    prompt=resolver_prompts.prompt,
-    name="resolver_agent"
-)
 
 def parse_final_answer_with_langchain(text: str):
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
@@ -200,7 +249,7 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
         "summary": data.get('summary', ''),
         "fe_spec": data.get('fe_spec', []),
         "be_spec": data.get('be_spec', [])
-    }
+}
 
 async def architect(state: OverallState):
     """Acts as the software architect to implement the main goals.
@@ -220,23 +269,29 @@ async def architect(state: OverallState):
     fe_spec = state.get("fe_spec")
     be_spec = state.get("be_spec")
 
+    fe_branch_name = ""
+    be_branch_name = ""
+
     specs_to_process = []
     if fe_spec:
         specs_to_process.append(("FE", fe_spec))
+        fe_branch_name = f"{state.get('project_name','sample_project')}_FE"
     if be_spec:
         specs_to_process.append(("BE", be_spec))
-
+        be_branch_name = f"{state.get('project_name','sample_project')}_BE"
     tasks = []
     for owner, spec in specs_to_process:
         if not spec:
             continue
+
+        branch_name = fe_branch_name if owner == "FE" else be_branch_name
         # 에이전트에 전달할 payload 구성
         payload = {
             "messages": state.get("messages", []),
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
-            "branch_name": f"{state.get("project_name", "sample_project")}_{owner}"
+            "branch_name": branch_name,
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
@@ -262,13 +317,15 @@ async def architect(state: OverallState):
         msgs = result.get("messages", []) if isinstance(result, dict) else []
         if isinstance(msgs, list):
             latest_messages.extend(msgs)
-    print(latest_messages)
+
     return {
-        "messages": latest_messages
+        "messages": latest_messages,
+        "fe_branch_name": fe_branch_name,
+        "be_branch_name": be_branch_name
     }
 
 
-async def role_allocate(state: OverallState):
+async def role_allocate(state: OverallState, config: RunnableConfig):
     """Allocates sub-goals to different developer roles or agents.
 
     This node uses the `role_allocate_chain` to process the sub-goals and
@@ -283,116 +340,57 @@ async def role_allocate(state: OverallState):
             decision message and the `sub_goals` mapped to specific roles.
             Note: The return statement is currently commented out.
     """
-    sub_goals = state.get("sub_goals", None)
+    fe_branch = state.get("fe_branch_name")
+    be_branch = state.get("be_branch_name")
 
-    if sub_goals is None:
-        return
-
-    result = await role_allocate_chain.ainvoke({
-        'sub_goals': state['sub_goals'],
-        'requirements': state['requirements'],
-        'user_scenarios': state['user_scenarios'],
-        'processes': state['processes'],
-        'domain_entities': state['domain_entities'],
-        'non_functional_reqs': state['non_functional_reqs'],
-        'exclusions': state['exclusions']
-    })
-    return {"messages": [AIMessage(content=json.dumps(result))], "user_story_groups": result.get("user_story_groups", [])}
-
-async def spawn_engineers(state: OverallState):
-    """A placeholder node for the software engineer agents' work.
-
-    In a complete implementation, this node would likely be replaced by a
-    dynamic dispatcher or multiple individual engineer agent nodes. It is
-    invoked after role allocation to carry out the development tasks.
-
+    @tool
+    async def spawn_fe_engineers(base_url: str, specs_list: list[list[dict]]):
+        """Spawns frontend engineers to work on the frontend branch. And clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
     Args:
-        state (RoleAllocateState): The state containing allocated sub-goals.
-
+        base_url (str): The base URL of the repository.
+        specs_list (list[list[dict]]): The grouped specs to spawn engineers for.
     Returns:
-        agent_results: list[dict]: A list of dictionaries, each containing container_id, code, cost_usd, error, and log.
-        For example:
-            [
-                {
-                    "container_id": "1234567890",
-                    "code": "...",
-                    "cost_usd": "...",
-                    "error": "...",
-                    "log": "..."
-                }
-                ...
-        ]
+        dict: A dictionary containing the agent results.
     """
+        print(f"Spawning frontend engineers for {fe_branch} with {specs_list}")
+        return await spawn_engineers(base_url, fe_branch, specs_list)
 
-    if not state['user_story_groups']:
-        return {}
-    user_story_groups = state['user_story_groups']
-    if len(user_story_groups) == 0:
-        return {}
-
-    # Run container spawning in a background thread and wait for completion
-    try:
-        results = await asyncio.to_thread(
-            spawn_engineers_tool,
-            state['base_url'],
-            {
-                "fe_branch_name": state['fe_branch_name'],
-                "be_branch_name": state['be_branch_name']
-            },
-            user_story_groups,
-        )
-    except Exception:
-        # Swallow errors here to avoid crashing the graph; downstream resolver can proceed
-        results = []
-
-    return {"agent_results": results}
-
-async def resolver(state: OverallState):
-    """Aggregates results from all agents and synthesizes a final response.
-
-    This node collects the outputs from all preceding agent nodes, which are
-    stored in 'agent_state'. It then invokes the `resolver_chain` to process
-    these intermediate results and generate a final, coherent response.
-
+    @tool
+    async def spawn_be_engineers(base_url: str, specs_list: list[list[dict]]):
+        """Spawns backend engineers to work on the backend branch. And clean up the containers after the job is done.
+    The container will implement the job using the claude-code.
     Args:
-        state (ResolverState): The state containing the 'agent_state' list, which
-            holds the outputs from all executed agents.
-
+        base_url (str): The base URL of the repository.
+        specs_list (list[list[dict]]): The grouped specs to spawn engineers for.
     Returns:
-        OutputState: The final output state of the graph, containing the
-            synthesized 'response'.
-            Note: The return statement is currently commented out.
+        dict: A dictionary containing the agent results.
     """
+        print(f"Spawning backend engineers for {be_branch} with {specs_list}")
+        return await spawn_engineers(base_url, be_branch, specs_list)
 
-    result = await resolver_agent.ainvoke(
-        {
-            'project_dir': state['branch_name'],
-            'base_branch': state['branch_name']
-        },
-        config={"recursion_limit": 100}
+    role_allocate_agent = create_custom_react_agent(
+        model=llm,
+        tools=[spawn_fe_engineers, spawn_be_engineers],
+        prompt=allocate_role_v2.prompt,
+        name="role_allocate_agent"
     )
-    # agent_results = {}
-    # for agent_name, agent_result in state["agent_state"]:
-    #     last_message = agent_result["messages"][-1]
-    #     agent_results[agent_name] = last_message.content
-
-    # result = await resolver_chain.ainvoke({'messages': state['messages']})
-    return {"messages": result['messages'], "response": result['resolver_result']}
+    result = await role_allocate_agent.ainvoke({
+        'messages': state['messages'],
+        'intermediate_steps': [],
+        'chat_id': config['configurable']['thread_id']
+    })
+    return {"messages": result['messages']}
 
 graph_builder = StateGraph(state_schema=OverallState)
 graph_builder.add_node("solution_owner", solution_owner)
 graph_builder.add_node("architect", architect)
 graph_builder.add_node("role_allocate", role_allocate)
-graph_builder.add_node("spawn_engineers", spawn_engineers)
-graph_builder.add_node("resolver", resolver)
 
-graph_builder.add_edge(START, "architect")
-graph_builder.add_edge("architect", END)
-# graph_builder.add_edge("architect", END)
-# graph_builder.add_edge("dev_planning", "architect")
-# graph_builder.add_edge("architect", "role_allocate")
-# graph_builder.add_edge("role_allocate", "spawn_engineers")
-# graph_builder.add_edge("resolver", END)
+graph_builder.add_edge(START, "solution_owner")
+graph_builder.add_edge("solution_owner", "architect")
+graph_builder.add_edge("architect", "role_allocate")
+graph_builder.add_edge("role_allocate", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"
