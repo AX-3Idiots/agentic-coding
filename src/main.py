@@ -12,6 +12,13 @@ from .core.config import git_config
 import logging
 import json
 import uuid
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage, BaseMessage
+
+class MessageEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, (AIMessage, HumanMessage, SystemMessage, ToolMessage, BaseMessage)):
+            return {"type": o.type, "content": o.content}
+        return super().default(o)
 
 setup_logging()
 load_dotenv()
@@ -73,7 +80,7 @@ async def stream_workflow(request: Request):
             else graph.astream_log(inputs, config=cfg)
         )
 
-        async for event in events_iter:
+        async for event in events_iter:            
             try:
                 if isinstance(event, (bytes, bytearray)):
                     text = event.decode("utf-8", errors="ignore")
@@ -89,8 +96,11 @@ async def stream_workflow(request: Request):
                         obj = json.loads(text)
                     except Exception:
                         obj = {"message": text}
-                yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
-            except Exception:
+                if obj["event"] == "on_chat_model_stream":
+                    continue
+                yield (json.dumps(obj, ensure_ascii=False, cls=MessageEncoder) + "\n").encode("utf-8")
+            except Exception as e:
+                print(e)
                 continue
 
     return StreamingResponse(
@@ -123,7 +133,7 @@ async def stream_workflow_v2(request: Request):
             else graph.astream_log(inputs, config=cfg)
         )
 
-        async for event in events_iter:
+        async for event in events_iter:            
             try:                
                 obj = event
                 if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
@@ -144,8 +154,8 @@ async def stream_workflow_v2(request: Request):
                             obj = {
                                 "data": content,
                             }
-                            # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                
-                yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+                            # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                   
+                yield (json.dumps(obj, ensure_ascii=False, cls=MessageEncoder) + "\n").encode("utf-8")
             except Exception as e:
                 print(e)
                 continue
