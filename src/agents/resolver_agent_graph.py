@@ -18,8 +18,8 @@ class ResolverState(ToolState):
     """Conflict Resolver 에이전트 전용으로 확장된 상태"""
     # --- 입력 데이터 ---
     # SA 에이전트로부터 전달받는 기준 브랜치
-    base_branch: str
-    project_dir: str
+    branch_name: str
+    git_url: str
 
     # --- 최종 결과 ---
     # 에이전트 작업 완료 후 생성될 구조화된 결과
@@ -117,8 +117,8 @@ def _create_initial_prompt(state: ResolverState) -> dict:
     에이전트 실행 시 입력받은 `base_branch`와 `requirement`를 사용하여
     LLM에게 전달할 첫 번째 임무 지시 메시지를 생성합니다.
     """
-    base_branch = state['base_branch']
-    project_dir = state['project_dir']
+    branch_name = state['branch_name']
+    git_url = state['git_url']
 
     # f-string을 사용해 명확한 초기 임무를 전달합니다.
     task_description = f"""
@@ -126,10 +126,10 @@ def _create_initial_prompt(state: ResolverState) -> dict:
 
     <task_info>
     <base_branch_to_merge_into>
-    {base_branch}
+    {branch_name}
     </base_branch_to_merge_into>
     <repository_path>
-    {project_dir}
+    {git_url}
     </repository_path>
     </task_info>
 

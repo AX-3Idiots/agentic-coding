@@ -43,9 +43,16 @@ backend_architect_prompt_template = ChatPromptTemplate([
   - 루트/서브 프로젝트 엔트리포인트(예: `main.py`)의 최소 골격
   - 환경/설정/패키지 매니페스트(예: `pyproject.toml`, 린트/포맷 설정) 중 dev_rules가 요구하는 최소 셋
   - 공통 규칙/가이드(`CLAUDE.md`), 간단한 README, `.gitignore`
+  - **README.md 내용**: `README.md` 파일에는 프로젝트를 실행하는 방법을 명확히 기술해야 합니다. 다음 두 가지 명령어를 반드시 포함해야 합니다:
+    - `uv sync`: 의존성 설치
+    - `uvicorn app.main:app --reload`: 서버 실행
   - 빈 디렉토리는 `.gitkeep`으로 표시
   - 멀티라인 콘텐츠는 꼭 필요한 파일에 한해서만 생성(주로 `CLAUDE.md`)
   - VERY IMPORTANT: Your final output MUST be a call to the `final_answer` tool. Do NOT provide any summary, description, or explanatory text in your final response. Your job is to execute the commands and report the branch name via the tool.
+- **선택적 의존성 규칙**:
+  - 요구사항(`spec`) 분석 시, 이메일 주소, URL, 데이터베이스 드라이버 등 특정 데이터 형식의 유효성 검사나 기능이 필요한지 확인해야 합니다.
+  - `pydantic`과 같은 라이브러리는 이런 추가 기능을 위해 선택적 의존성(optional dependency)을 요구할 수 있습니다.
+  - 예를 들어, 요구사항에 이메일 필드가 포함된 경우, `pyproject.toml`의 `dependencies`에 `"pydantic"`가 아닌 `"pydantic[email]"`을 추가하여 관련 유효성 검사 패키지(`email-validator`)가 함께 설치되도록 해야 합니다.
 </rules>
 
 <procedure>

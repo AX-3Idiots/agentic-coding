@@ -43,6 +43,10 @@ frontend_architect_prompt_template = ChatPromptTemplate([
   - 빈 디렉토리는 `.gitkeep`으로 표시
   - 멀티라인 콘텐츠는 꼭 필요한 파일에 한해서만 생성(주로 `CLAUDE.md`)
   - VERY IMPORTANT: Your final output MUST be a call to the `final_answer` tool. Do NOT provide any summary, description, or explanatory text in your final response. Your job is to execute the commands and report the branch name via the tool.
+- **의존성 관리 규칙**:
+  - `npm install` 사용 시 `--legacy-peer-deps` 또는 `--force` 옵션은 절대 사용하지 마십시오. 의존성 충돌(예: `ERESOLVE` 오류)이 발생하면, 관련 패키지들의 버전을 조정하여 근본적인 원인을 해결해야 합니다.
+  - 새로운 라이브러리를 추가할 때는 반드시 현재 프로젝트의 핵심 라이브러리(예: `react`) 버전과 호환되는 안정적인 최신 버전을 선택해야 합니다.
+  - `package.json`에 의존성을 추가할 때, 버전 범위(`^` 또는 `~`)가 예기치 않은 문제를 일으킬 수 있다고 판단되면, 정확한 버전을 명시하여 안정성을 확보하십시오. (예: `"react": "19.1.1"`)
 </rules>
 
 <procedure>
