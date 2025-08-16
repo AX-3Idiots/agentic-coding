@@ -195,7 +195,15 @@ async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.
     # Final try
     return await func(*args, **kwargs)
 
-def parse_final_answer_with_langchain(text: str):
+def parse_final_answer_with_langchain(text: Union[str, List[Dict[str, Any]]]):
+    if isinstance(text, list):
+        full_text = []
+        for part in text:
+            if isinstance(part, str):
+                full_text.append(part)
+            elif isinstance(part, dict) and 'text' in part:
+                full_text.append(part['text'])
+        text = "".join(full_text)
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
         try:
