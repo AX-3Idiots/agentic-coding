@@ -78,6 +78,12 @@ You are a lead software engineer who need to group the development specs to prep
 Your main goal is to avoid conflict between the code agents by grouping similar development specs.
 </identity>
 
+<project_context>
+Here are the project context that you should look at to understand the project.
+The context is a log of the accumulated messages from the solution owner to the architect.
+It contains the title, a description of archetypes, and the specs.
+</project_context>
+
 <instructions>
 Your task is to group the provided specs into groups to prepare for the code agent allocation.
 
@@ -89,6 +95,7 @@ For each spec:
 4. If there is no dependencies between specs, group them into one group
 5. If there is dependencies between specs, group them into one group
 6. REPEAT 1-5 until all specs are grouped by dependencies
+7. spawn the code agents for each group by using the spawn_engineers tool. The branch name should ALWAYS be already existing one DO NOT CREATE NEW BRANCHES.
 
 
 <sequence_diagram_guidance>
@@ -146,7 +153,7 @@ Return ONLY valid JSON with the following shape:
 }}
 </output_format>
 """),
-        ("human", "Here are the specs: {messages}"),
-    ]
+        ("human", "Here are the project specs: {messages}"),
+  ]
 )
 )

@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from docker.errors import ImageNotFound, NotFound, DockerException
 from ..constants.aws_model import AWSModel
-from ..prompts.se_agent_prompts import se_agent_prompts_v1
+from ..prompts import se_agent_prompts
 import json
 import uuid
 import time
@@ -99,15 +99,15 @@ def _get_or_build_image():
     
     return _image
 
-def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]) -> list[str]:
+def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]]) -> list[str]:
     """
     Spawn a container for each job.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
-        branch_names (dict[str, str]): A dictionary of branch names for frontend and backend.
-        jobs (list[dict]): A list of jobs to spawn.
+        branch_name (str): A branch name for frontend and backend.
+        jobs (list[list[dict]]): A list of jobs to spawn.
 
     Returns:
         list[str]: A list of container IDs.
@@ -116,16 +116,12 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
     image = _get_or_build_image()
     
     container_ids = []
-    for job in jobs:
+    for job_group in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
-        user_input = json.dumps(job)
-        system_prompt = se_agent_prompts_v1.prompt.invoke({
-            "language": "Javascript", 
-            "framework": "React", 
-            "library": "Any",
-            "fe_branch_name": branch_names.get("fe_branch_name"),
-            "be_branch_name": branch_names.get("be_branch_name")
-        }).messages[0].content
+        user_input = "\n".join([json.dumps(job) for job in job_group])
+        system_prompt = se_agent_prompts.se_agent_prompts_specs.prompt.format(
+            branch_name=branch_name
+        )
         
         volume = client.volumes.create(name=volume_name)
         container = client.containers.run(
@@ -146,10 +142,9 @@ def _spawn_containers(git_url:str, branch_names:dict[str, str], jobs: list[dict]
                 "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY"],
                 "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_KEY"],
                 "GITHUB_TOKEN": os.environ.get("GH_APP_TOKEN"),
-                "JOB_NAME": job.get("group_name"),
                 "INSTALLATION_ID": os.environ.get("INSTALLATION_ID"),
                 "CLAUDE_CODE_MAX_OUTPUT_TOKENS": 9136,
-                "MAX_THINKING_TOKENS": 1024
+                "MAX_THINKING_TOKENS": 2048
             },
             volumes={volume.name: {"bind": "/app", "mode": "rw"}},
         )
@@ -219,7 +214,6 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
                 'code': result_data.get('code'),
                 'cost_usd': result_data.get('cost_usd'),
                 'error': result_data.get('error'),
-                'log': logs[:-1]
             })
 
         except NotFound:
@@ -283,14 +277,14 @@ def _remove_containers(container_ids: list[str]) -> None:
         except Exception as e:
             logging.error(f"Error removing container {container_id}: {e}")
 
-def spawn_engineers(git_url: str, branch_names: dict[str, str], jobs: list[dict]) -> list[dict]:
+def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]]) -> list[dict]:
     """
     Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
 
     Args:
         git_url (str): The URL of the repository to clone.
-        branch_names (dict[str, str]): A dictionary of branch names for frontend and backend.
+        branch_name (str): A branch name for frontend and backend.
         jobs (list[dict]): A list of jobs to spawn.
 
     Returns:
@@ -298,7 +292,7 @@ def spawn_engineers(git_url: str, branch_names: dict[str, str], jobs: list[dict]
     """
     container_ids = []
     try:
-        container_ids = _spawn_containers(git_url, branch_names, jobs)
+        container_ids = _spawn_containers(git_url, branch_name, jobs)
         while _is_container_running(container_ids):
             print("Waiting for containers to finish...")
             time.sleep(10)

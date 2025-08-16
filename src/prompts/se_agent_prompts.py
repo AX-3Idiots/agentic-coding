@@ -322,8 +322,7 @@ Before you finish the session, you **MUST** check whether you have committed and
 If there is a conflict, you **MUST** resolve it before finishing the session.
 </end_of_session>
 """
-            ),
-            HumanMessagePromptTemplate.from_template("{spec_group}"),
+            )
         ]
     ),
 )

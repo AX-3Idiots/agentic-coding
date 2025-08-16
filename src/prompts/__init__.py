@@ -13,6 +13,7 @@ __all__ = [
     "solution_owner_prompts_v1",
     "solution_owner_prompts_v2",
     "role_allocate_prompts",
+    "role_allocate_prompts_v2",
     "architect_agent_prompts",
     "se_agent_prompts",
     "resolver_prompts",

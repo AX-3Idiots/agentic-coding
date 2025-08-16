@@ -15,11 +15,12 @@ from langfuse import get_client as get_langfuse_client
 import random
 from src.tools.final_answer_tools import FinalAnswerTool
 from src.prompts import (
-    solution_owner_prompts_v1,
+    solution_owner_prompts_v2,
     frontend_architect_agent_prompts,
     backend_architect_agent_prompts,
     allocate_role_v2,
-    resolver_prompts
+    resolver_prompts,
+    se_agent_prompts
 )
 import re
 import os
@@ -150,7 +151,7 @@ async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list
 solution_owner_agent = create_custom_react_agent(
     model=llm,
     tools=[human_assistance],
-    prompt=solution_owner_prompts_v1.prompt,
+    prompt=solution_owner_prompts_v2.prompt,
     name="solution_owner_agent"
 )
 
@@ -206,7 +207,10 @@ async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.
 def parse_final_answer_with_langchain(text: str):
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
-        raise ValueError("No <final_answer>...</final_answer> found")
+        try:
+            return parser.parse(text)
+        except Exception as e:
+            raise ValueError("No <final_answer>...</final_answer> found")
     return parser.parse(m.group(1).strip())
 
 async def solution_owner(state: OverallState, config: RunnableConfig):
@@ -250,10 +254,10 @@ async def solution_owner(state: OverallState, config: RunnableConfig):
     data = parse_final_answer_with_langchain(result['messages'][-1].content)
     return {
         "messages": result['messages'],
-        "project_name": data['project_name'],
-        "summary": data['summary'],
-        "fe_spec": data['fe_spec'],
-        "be_spec": data['be_spec']
+        "project_name": data.get('project_name', ''),
+        "summary": data.get('summary', ''),
+        "fe_spec": data.get('fe_spec', []),
+        "be_spec": data.get('be_spec', [])
 }
 
 async def architect(state: OverallState):
@@ -322,7 +326,7 @@ async def architect(state: OverallState):
     }
 
 
-async def role_allocate(state: OverallState):
+async def role_allocate(state: OverallState, config: RunnableConfig):
     """Allocates sub-goals to different developer roles or agents.
 
     This node uses the `role_allocate_chain` to process the sub-goals and
@@ -339,6 +343,8 @@ async def role_allocate(state: OverallState):
     """
     result = await role_allocate_agent.ainvoke({
         'messages': state['messages'],
+        'intermediate_steps': [],
+        'chat_id': config['configurable']['thread_id']
     })
     return {"messages": result['messages']}
 
@@ -362,7 +368,7 @@ async def main():
         with langfuse.start_as_current_span(name="dexter-chat-session") as span:
             span.update_trace(user_id="Dexter")
             result = await graph.ainvoke(
-                {"messages": [HumanMessage(content="Create a timer app  only for frontend")],
+                {"messages": [HumanMessage(content="Create a Shopping site app like Amazon")],
                 "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git"
                 },
                 config={
