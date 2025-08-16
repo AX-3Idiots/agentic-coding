@@ -55,6 +55,8 @@ class OverallState(TypedDict):
     be_spec: dict[str, Any] | None
     response: str
     project_name: str
+    fe_branch_name: str
+    be_branch_name: str
 
 config = Config(
     read_timeout=1800,
@@ -278,23 +280,29 @@ async def architect(state: OverallState):
     fe_spec = state.get("fe_spec")
     be_spec = state.get("be_spec")
 
+    fe_branch_name = ""
+    be_branch_name = ""
+
     specs_to_process = []
     if fe_spec:
         specs_to_process.append(("FE", fe_spec))
+        fe_branch_name = f"{state.get('project_name','sample_project')}_FE"
     if be_spec:
         specs_to_process.append(("BE", be_spec))
-
+        be_branch_name = f"{state.get('project_name','sample_project')}_BE"
     tasks = []
     for owner, spec in specs_to_process:
         if not spec:
             continue
+
+        branch_name = fe_branch_name if owner == "FE" else be_branch_name
         # 에이전트에 전달할 payload 구성
         payload = {
             "messages": state.get("messages", []),
             "spec": spec,
             "git_url": state.get("base_url", ""),
             "owner": owner,
-            "branch_name": f"{state.get('project_name','sample_project')}_{owner}",
+            "branch_name": branch_name,
         }
 
         architect_agent_to_run = frontend_architect_agent if owner == "FE" else backend_architect_agent
@@ -322,7 +330,9 @@ async def architect(state: OverallState):
             latest_messages.extend(msgs)
 
     return {
-        "messages": latest_messages
+        "messages": latest_messages,
+        "fe_branch_name": fe_branch_name,
+        "be_branch_name": be_branch_name
     }
 
 
