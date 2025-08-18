@@ -362,7 +362,7 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
         dict: A dictionary containing the agent results.
     """
         print(f"Spawning frontend engineers for {fe_branch} with {specs_list}")
-        return await spawn_engineers(base_url, fe_branch, specs_list)
+        return await spawn_engineers(base_url, fe_branch, specs_list, is_frontend=True)
 
     @tool
     async def spawn_be_engineers(base_url: str, specs_list: list[list[dict]]):

@@ -403,7 +403,7 @@ async def main():
         with langfuse.start_as_current_span(name="dexter-chat-session") as span:
             span.update_trace(user_id="Dexter")
             result = await graph.ainvoke(
-                {"messages": [HumanMessage(content="Create a Shopping site app like Amazon")],
+                {"messages": [HumanMessage(content="Create a GPT like chatbot app. The app should have a options for multiple models. I want the chatballon to have a animation when the chat is newly created by saying hello user.")],
                 "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git"
                 },
                 config={

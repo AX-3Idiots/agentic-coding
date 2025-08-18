@@ -17,6 +17,7 @@ from src.tools.final_answer_tools import FinalAnswerTool
 from src.prompts import (
     solution_owner_prompts_v2,
     frontend_architect_agent_prompts,
+    frontend_architect_agent_prompts_v2,
     backend_architect_agent_prompts,
     allocate_role_v2,
     resolver_prompts,
@@ -39,6 +40,8 @@ from langgraph.types import interrupt
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 import uuid
 from src.core.config import git_config
+
+
 
 # Load .env from repo root explicitly and override to ensure keys are visible
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
@@ -67,20 +70,35 @@ config = Config(
     },
 )
 
-bedrock_client = boto3.client(
+us_bedrock_client = boto3.client(
+    "bedrock-runtime",
+    region_name='us-east-1',
+    config=config,
+)
+
+kr_bedrock_client = boto3.client(
     "bedrock-runtime",
     region_name=os.environ["AWS_DEFAULT_REGION"],
     config=config,
 )
 
-llm = ChatBedrockConverse(
+sonnet_llm = ChatBedrockConverse(
     model=AWSModel.ANTHROPIC_CLAUDE_4_SONNET_SEOUL_CROSS_REGION,
-    client=bedrock_client,
+    client=kr_bedrock_client,
     temperature=0,
-    max_tokens=None,
+    max_tokens=9000,
     region_name=os.environ["AWS_DEFAULT_REGION"],
 )
 
+opus_llm = ChatBedrockConverse(
+    model=AWSModel.ANTHROPIC_CLAUDE_OPUS_4_1_CROSS_REGION,
+    client=us_bedrock_client,
+    temperature=0,
+    max_tokens=9000,
+    region_name=os.environ["AWS_DEFAULT_REGION"],
+)
+
+parser = JsonOutputParser()
 
 @tool
 def human_assistance(query: str) -> str:
@@ -91,7 +109,7 @@ def human_assistance(query: str) -> str:
     # return human_response["data"]
     return "Just assume the safe default for the archetype and requirements for software development."
 
-async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]]):
+async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]], **kwargs):
     """Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
 
@@ -139,6 +157,7 @@ async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list
             git_url=base_url,
             branch_name=branch_name,
             jobs=specs_list,
+            **kwargs
         )
     except Exception:
         # Swallow errors here to avoid crashing the graph; downstream resolver can proceed
@@ -147,32 +166,26 @@ async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list
     return {"agent_results": results}
 
 solution_owner_agent = create_custom_react_agent(
-    model=llm,
+    model=sonnet_llm,
     tools=[human_assistance],
     prompt=solution_owner_prompts_v2.prompt,
     name="solution_owner_agent"
 )
 
 frontend_architect_agent = create_architect_agent(
-    model=llm,
+    model=opus_llm,
     tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
     prompt=frontend_architect_agent_prompts.prompt,
     name="frontend_architect_agent"
 )
 
 backend_architect_agent = create_architect_agent(
-    model=llm,
+    model=opus_llm,
     tools=[ExecuteShellCommandTool(), FinalAnswerTool()],
     prompt=backend_architect_agent_prompts.prompt,
     name="backend_architect_agent"
 )
 
-resolver_agent = create_resolver_agent(
-    model=llm,
-    tools=[ExecuteShellCommandTool(),CodeConflictResolverTool(llm=llm)],
-    prompt=resolver_prompts.prompt,
-    name="resolver_agent"
-)
 
 async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.5, **kwargs):
     """
@@ -202,7 +215,15 @@ async def _retry_async(func, *args, max_retries: int = 6, base_delay: float = 0.
     # Final try
     return await func(*args, **kwargs)
 
-def parse_final_answer_with_langchain(text: str):
+def parse_final_answer_with_langchain(text: Union[str, List[Dict[str, Any]]]):
+    if isinstance(text, list):
+        full_text = []
+        for part in text:
+            if isinstance(part, str):
+                full_text.append(part)
+            elif isinstance(part, dict) and 'text' in part:
+                full_text.append(part['text'])
+        text = "".join(full_text)
     m = re.search(r"<final_answer>([\s\S]*?)</final_answer>", text, re.IGNORECASE)
     if not m:
         try:
@@ -361,7 +382,7 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
         dict: A dictionary containing the agent results.
     """
         print(f"Spawning frontend engineers for {fe_branch} with {specs_list}")
-        return await spawn_engineers(base_url, fe_branch, specs_list)
+        return await spawn_engineers(base_url, fe_branch, specs_list, is_frontend=True)
 
     @tool
     async def spawn_be_engineers(base_url: str, specs_list: list[list[dict]]):
@@ -377,7 +398,7 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
         return await spawn_engineers(base_url, be_branch, specs_list)
 
     role_allocate_agent = create_custom_react_agent(
-        model=llm,
+        model=opus_llm,
         tools=[spawn_fe_engineers, spawn_be_engineers],
         prompt=allocate_role_v2.prompt,
         name="role_allocate_agent"
@@ -386,79 +407,26 @@ async def role_allocate(state: OverallState, config: RunnableConfig):
         'messages': state['messages'],
         'intermediate_steps': [],
         'chat_id': config['configurable']['thread_id']
-    })
+    },
+    config={
+        "recursion_limit": 200
+    }
+    )
     return {"messages": result['messages']}
-
-async def resolver(state: OverallState):
-    """Aggregates results from all agents and synthesizes a final response.
-
-    This node collects the outputs from all preceding agent nodes, which are
-    stored in 'agent_state'. It then invokes the `resolver_chain` to process
-    these intermediate results and generate a final, coherent response.
-
-    Args:
-        state (ResolverState): The state containing the 'agent_state' list, which
-            holds the outputs from all executed agents.
-
-    Returns:
-        OutputState: The final output state of the graph, containing the
-            synthesized 'response'.
-            Note: The return statement is currently commented out.
-    """
-    print("resolver!!!!!")
-    fe_branch_name = state.get("fe_branch_name")
-    be_branch_name = state.get("be_branch_name")
-
-    specs_to_process = []
-    if fe_branch_name:
-        specs_to_process.append(fe_branch_name)
-    if be_branch_name:
-        specs_to_process.append(be_branch_name)
-    tasks = []
-    for branch_name in specs_to_process:
-
-        # 에이전트에 전달할 payload 구성
-        payload = {
-            "branch_name": branch_name,
-            "git_url": state.get("base_url", ""),
-        }
-
-        task = _retry_async(
-            resolver_agent.ainvoke,
-            payload,
-            config={
-                "recursion_limit": 200
-            },
-            max_retries=7,
-            base_delay=0.6,
-        )
-        tasks.append(task)
-
-    results = []
-    if tasks:
-        results = await asyncio.gather(*tasks)
-
-    latest_messages = []
-    for result in results:
-        msgs = result.get("messages", []) if isinstance(result, dict) else []
-        if isinstance(msgs, list):
-            latest_messages.extend(msgs)
-
-    return {"messages": latest_messages, "response": ""}
 
 graph_builder = StateGraph(state_schema=OverallState)
 graph_builder.add_node("solution_owner", solution_owner)
 graph_builder.add_node("architect", architect)
 graph_builder.add_node("role_allocate", role_allocate)
-graph_builder.add_node("resolver", resolver)
+
 graph_builder.add_edge(START, "solution_owner")
 graph_builder.add_edge("solution_owner", "architect")
 graph_builder.add_edge("architect", "role_allocate")
-graph_builder.add_edge("role_allocate", "resolver")
-graph_builder.add_edge("resolver", END)
+graph_builder.add_edge("role_allocate", END)
 
 graph = graph_builder.compile()
 graph.name = "agentic-coding-graph"
+
 
 parser = JsonOutputParser()
 
@@ -467,14 +435,15 @@ async def main():
         with langfuse.start_as_current_span(name="anthony-chat-session") as span:
             span.update_trace(user_id="Anthony")
             result = await graph.ainvoke(
-                {"messages": [HumanMessage(content="Create a timer app like a stopwatch")],
-                "base_url": "https://github.com/AX-3Idiots/agentic_coding_test.git"
+                {"messages": [HumanMessage(content="Create a GPT like chatbot app. The app should have a options for multiple models. I want the chatballon to have a animation when the chat is newly created by saying hello user.")],
+                "base_url": "https://github.com/AX-3Idiots/dexter_test.git"
                 },
                 config={
                     "configurable": {"thread_id": str(uuid.uuid4())},
                     "callbacks": [lf_cb]
                 }
             )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -68,17 +68,8 @@ resolver_prompt_template = ChatPromptTemplate([
                 - `git push origin {branch_name}`
             - **변경 사항이 없다면**, 커밋과 푸시를 모두 건너뜁니다.
 
-    **4. 정리**
-        - `cd ..`: 상위 디렉터리로 이동합니다.
-        - `rm -rf ./test_{branch_name}`: 작업 디렉터리를 삭제합니다.
-
     **중요한 종료 조건**:
     - 모든 작업 흐름을 성공적으로 완료하고 작업 디렉터리까지 삭제했다면, 최종적으로 JSON 형식의 결과를 출력하고 종료해야 합니다.
-
-    모든 작업이 완료되고 최종 커밋이 생성되면 다음의 작업을 수행하세요.
-    1. 사용한 `test_{branch_name}` 폴더를 삭제하세요.
-      * **명령어:** `rm -rf ./test_{branch_name}`
-    2. **중요**: 모든 작업이 완료되면 반드시 아래 JSON 형식으로만 응답하세요.
     </instruction_cycle>
 
     ---

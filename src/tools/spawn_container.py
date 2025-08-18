@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from docker.errors import ImageNotFound, NotFound, DockerException
 from ..constants.aws_model import AWSModel
-from ..prompts import se_agent_prompts
+from ..prompts import se_agent_prompts, se_agent_prompts_specs_frontend
 import json
 import uuid
 import time
@@ -99,7 +99,7 @@ def _get_or_build_image():
     
     return _image
 
-def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]]) -> list[str]:
+def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]], **kwargs) -> list[str]:
     """
     Spawn a container for each job.
     The container will implement the job using the claude-code.
@@ -108,7 +108,7 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]]) -> l
         git_url (str): The URL of the repository to clone.
         branch_name (str): A branch name for frontend and backend.
         jobs (list[list[dict]]): A list of jobs to spawn.
-
+        **kwargs: Additional arguments to pass to the container.
     Returns:
         list[str]: A list of container IDs.
     """
@@ -118,10 +118,15 @@ def _spawn_containers(git_url:str, branch_name:str, jobs: list[list[dict]]) -> l
     container_ids = []
     for job_group in jobs:
         volume_name = f"se-agent-volume-{uuid.uuid4()}"
-        user_input = "\n".join([json.dumps(job) for job in job_group])
+        user_input = "\n".join([json.dumps(job) for job in job_group])        
         system_prompt = se_agent_prompts.se_agent_prompts_specs.prompt.format(
-            branch_name=branch_name
-        )
+                branch_name=branch_name
+            )
+        
+        if kwargs.get("is_frontend", False):
+            system_prompt = se_agent_prompts_specs_frontend.prompt.format(
+                branch_name=branch_name
+            )
         
         volume = client.volumes.create(name=volume_name)
         container = client.containers.run(
@@ -278,7 +283,7 @@ def _remove_containers(container_ids: list[str]) -> None:
         except Exception as e:
             logging.error(f"Error removing container {container_id}: {e}")
 
-def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]]) -> list[dict]:
+def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]], **kwargs) -> list[dict]:
     """
     Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
@@ -287,13 +292,13 @@ def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]]) -> l
         git_url (str): The URL of the repository to clone.
         branch_name (str): A branch name for frontend and backend.
         jobs (list[dict]): A list of jobs to spawn.
-
+        **kwargs: Additional arguments to pass to the container.
     Returns:
         list[dict]: A list of dictionaries, each containing code and cost.
     """
     container_ids = []
     try:
-        container_ids = _spawn_containers(git_url, branch_name, jobs)
+        container_ids = _spawn_containers(git_url, branch_name, jobs, **kwargs)
         while _is_container_running(container_ids):
             print("Waiting for containers to finish...")
             time.sleep(10)

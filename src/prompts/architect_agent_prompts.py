@@ -56,9 +56,8 @@ architect_prompt_template = ChatPromptTemplate([
 <instructions>
 1) `mkdir {branch_name} && cd {branch_name} && git clone --depth 1 https://x-access-token:$GH_APP_TOKEN@{git_url} .`
 2) `git config user.name "Architect Agent" && git config user.email "architect-agent@users.noreply.github.com" && git checkout -b {branch_name}`
-3) `{directory_tree}` 기반으로 디렉토리만 일괄 생성(mkdir -p). 이때 경로 앞의 `repo/` 접두는 모두 제거합니다. FE의 경우 `frontend/` 접두도 제거하여 `src/...` 형태로 생성합니다. 파일은 필수 스캐폴드만 최소 내용으로 생성(touch/echo/짧은 printf 사용). 생성 후 owner 범위에 맞지 않는 디렉토리(`frontend/`↔`backend/`, `infra/`, `docs/`)가 있으면 즉시 삭제하십시오. 또한 FE에서는 루트에 `frontend` 디렉토리가 생겼다면 반드시 삭제하십시오(`test -d frontend && rm -rf frontend || true`).
+3) `{directory_tree}` 기반으로 디렉토리만 일괄 생성(mkdir -p). 이때 경로 앞의 `repo/` 접두는 모두 제거합니다. FE의 경우 `frontend/` 접두도 제거하여 `src/...` 형태로 생성합니다. 파일은 필수 스캐폴드만 최소 내용으로 생성(touch/echo/짧은 printf 사용). 생성 후 owner 범위에 맞지 않는 디렉토리(`frontend/`↔`backend/`, `infra/`, `docs/`)가 있으면 즉시 삭제하십시오. 또한 FE에서는 루트에 `frontend` 디렉토리가 생겼다면 반드시 삭제하십시오(`test -d frontend`).
 4) `git add . && GIT_AUTHOR_NAME="Architect Agent" GIT_AUTHOR_EMAIL="architect-agent@users.noreply.github.com" GIT_COMMITTER_NAME="Architect Agent" GIT_COMMITTER_EMAIL="architect-agent@users.noreply.github.com" git commit -m "feat: Initial architecture for {branch_name}" && (git push -u origin {branch_name} || (git fetch origin {branch_name} && git rebase origin/{branch_name} && git push -u origin {branch_name}))`
-5) cleanup: `cd .. && rm -rf {branch_name}`
 </instructions>
 
 <output_format>

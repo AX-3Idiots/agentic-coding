@@ -16,6 +16,7 @@ __all__ = [
     "role_allocate_prompts_v2",
     "architect_agent_prompts",
     "se_agent_prompts",
+    "se_agent_prompts_specs_frontend",
     "resolver_prompts",
     "conflict_prompts",
     "frontend_architect_agent_prompts",
