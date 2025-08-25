@@ -199,10 +199,14 @@ Think step by step.
 </decision_flow>
 
 <final_answer>
-Provide your final answer in the following format:
+Make sure you wrap the final answer in <final_answer> tags.
 If user request does not mention anything about frontend or backend, return both fe_spec and be_spec.
 If user request mentions only frontend, return fe_spec.
 If user request mentions only backend, return be_spec.
+
+For example:
+<example>
+<final_answer>
 {
     "project_name": "The name of the project. should be in snake_case like 'shopping_site'",
     "summary": "A detailed summary of the output and reasoning behind the decisions you made.",
@@ -222,6 +226,21 @@ If user request mentions only backend, return be_spec.
     ]
 }
 </final_answer>
+</example>
+<example>
+<final_answer>
+{
+    "project_name": "The name of the project. should be in snake_case like 'shopping_site'",
+    "summary": "A detailed summary of the output and reasoning behind the decisions you made.",
+    "fe_spec": [
+        {
+            "title": "title",
+            "description": "detailed description of the spec_item in frontend. **ALWAYS** contain the description about the page and the components in the page."
+        },
+        ...
+    ],
+</final_answer>
+</example>
 </instructions>
                 """
             ),

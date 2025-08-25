@@ -128,7 +128,7 @@ async def stream_workflow_v2(request: Request):
 
         # Choose the best available stream API, but iterate with one unified loop
         events_iter = (
-            graph.astream_events(inputs, config=cfg, version="v1")
+            graph.astream_events(inputs, config=cfg, version="v2", subgraphs=True, stream_mode=['updates', 'custom'])
             if getattr(graph, "astream_events", None)
             else graph.astream_log(inputs, config=cfg)
         )
@@ -142,24 +142,24 @@ async def stream_workflow_v2(request: Request):
                 if event_type == "on_chat_model_stream":
                     continue
                     
-                # if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
-                #     obj = {
-                #         "event": "on_tool_start", 
-                #         "tool_name": "human_assistance", 
-                #         "langgrah_node": "tools", 
-                #         "data": obj.data
-                #     }
-                # if obj["event"] == "on_chat_model_stream":
-                #     print(obj)
-                #     chunk = event["data"].get("chunk")
-                #     if chunk and hasattr(chunk, "content"):
-                #         content = chunk.content
-                #         if content:
-                #             # Serialize the content directly to NDJSON
-                #             obj = {
-                #                 "data": content,
-                #             }
-                #             # yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                   
+                if getattr(obj, "event", None) == "on_tool_start" and getattr(obj, "name", None) == "human_assistance":
+                    obj = {
+                        "event": "on_tool_start", 
+                        "tool_name": "human_assistance", 
+                        "langgrah_node": "tools", 
+                        "data": obj.data
+                    }
+                if obj["event"] == "on_chat_model_stream":
+                    print(obj)
+                    chunk = event["data"].get("chunk")
+                    if chunk and hasattr(chunk, "content"):
+                        content = chunk.content
+                        if content:
+                            # Serialize the content directly to NDJSON
+                            obj = {
+                                "data": content,
+                            }
+                            yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")                   
                 yield (json.dumps(obj, ensure_ascii=False, cls=MessageEncoder) + "\n").encode("utf-8")
             except Exception as e:
                 print(e)

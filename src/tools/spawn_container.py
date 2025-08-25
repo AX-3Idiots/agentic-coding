@@ -9,6 +9,7 @@ import uuid
 import time
 from ..logging_config import setup_logging
 import logging
+from langgraph.config import get_stream_writer
 
 load_dotenv()
 
@@ -182,18 +183,18 @@ def _is_container_running(container_ids: list[str]) -> bool:
             continue
     return False
 
-def _get_container_results(container_ids: list[str]) -> list[dict]:
+def _get_container_results(container_ids: list[str]) -> list[str]:
     """
-    Get the logs of the exited containers and parse the results.
+    Get the logs of the exited containers and return the final line as-is.
 
     Args:
         container_ids (list[str]): A list of exited container IDs.
 
     Returns:
-        list[dict]: A list of dictionaries, each containing code and cost.
+        list[str]: A list of raw strings (last log line per container).
     """
     client = _get_docker_client()
-    results = []
+    results: list[str] = []
     for container_id in container_ids:
         try:
             container = client.containers.get(container_id)
@@ -204,40 +205,16 @@ def _get_container_results(container_ids: list[str]) -> list[dict]:
             # Get logs
             logs = container.logs().decode('utf-8').strip().split('\n')
             logger.info(f"results for {container_id}:\n{logs}")
-            # The last line should be our JSON result
-            last_line = logs[-1] if logs else ''            
-            result_data = {}
-            try:
-                # Parse the JSON from the last line
-                result_data = json.loads(last_line)
-            except json.JSONDecodeError:
-                logger.warning(f"Warning: Could not decode JSON from logs of container {container_id}")
-                logger.warning(f"Full logs for {container_id}:\n{logs}")
-                result_data = {'code': None, 'cost_usd': None, 'error': f"Failed to parse result. Full logs: {logs}"}
-
-            results.append({
-                'container_id': container_id,
-                'code': result_data.get('code'),
-                'cost_usd': result_data.get('cost_usd'),
-                'error': result_data.get('error'),
-            })
+            # Take the last up to 5 lines and join them with newlines
+            tail_lines = logs[-5:] if logs else []
+            results.append("\n".join(tail_lines))
 
         except NotFound:
             print(f"Warning: Container {container_id} not found. It might have been removed already.")
-            results.append({
-                'container_id': container_id,
-                'code': None,
-                'cost_usd': None,
-                'error': 'Container not found.'
-            })
+            results.append('Container not found.')
         except Exception as e:
             print(f"An error occurred while processing container {container_id}: {e}")
-            results.append({
-                'container_id': container_id,
-                'code': None,
-                'cost_usd': None,
-                'error': str(e)
-            })
+            results.append(str(e))
 
     return results
 
@@ -283,7 +260,7 @@ def _remove_containers(container_ids: list[str]) -> None:
         except Exception as e:
             logging.error(f"Error removing container {container_id}: {e}")
 
-def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]], **kwargs) -> list[dict]:
+def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]], **kwargs) -> list[str]:
     """
     Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
@@ -294,15 +271,17 @@ def spawn_engineers(git_url: str, branch_name: str, jobs: list[list[dict]], **kw
         jobs (list[dict]): A list of jobs to spawn.
         **kwargs: Additional arguments to pass to the container.
     Returns:
-        list[dict]: A list of dictionaries, each containing code and cost.
+        list[str]: A list of raw strings (last log line per container).
     """
     container_ids = []
+    stream_writer = get_stream_writer()
     try:
         container_ids = _spawn_containers(git_url, branch_name, jobs, **kwargs)
         while _is_container_running(container_ids):
-            print("Waiting for containers to finish...")
+            stream_writer({'status': 'running'})
             time.sleep(10)
         results = _get_container_results(container_ids)
+        stream_writer({'status': 'finished'})
         return results
     except Exception as e:
         logger.error(f"An error occurred while spawning containers: {e}")

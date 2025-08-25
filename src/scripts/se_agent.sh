@@ -17,15 +17,18 @@ git remote set-url origin "$AUTH_URL"
 
 echo "Running Claude-Code..."
 
-# Create a temporary file to store the output with .log extension
-output_log=$(mktemp)
-trap 'rm -f "$output_log"' EXIT # Clean up on exit
+# Create temporary files to store stdout (JSON) and stderr (logs)
+output_json=$(mktemp)
+stderr_log=$(mktemp)
+trap 'rm -f "$output_json" "$stderr_log"' EXIT # Clean up on exit
 
-# Run the claude command and capture combined output, then check exit status
-if ! timeout "$TIME_OUT" claude --verbose -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json 2>"$output_log"; then
+# Run the claude command, capture stdout (JSON) and stderr (logs), then check exit status
+if ! timeout "$TIME_OUT" claude --verbose -p "$USER_INPUT" --system-prompt "$SYSTEM_PROMPT" --output-format json >"$output_json" 2>"$stderr_log"; then
     echo "Error: The 'claude' command failed." >&2
-    echo "--- Full output ---" >&2
-    cat "$output_log"
+    echo "--- Full stderr ---" >&2
+    cat "$stderr_log" >&2
+    echo "--- Captured stdout ---" >&2
+    cat "$output_json" >&2
     exit 1
 fi
 
@@ -46,5 +49,5 @@ if [[ "$files_count" == "1" ]]; then
   jq -c '{type, message, timestamp}' "$only_file"
 fi
 
-# Print the final summarized result via jq only
-jq -c '{code: .result, cost_usd: .total_cost_usd}' "$output_log"
+# Print the captured JSON as-is (must be the last line)
+cat "$output_json"
