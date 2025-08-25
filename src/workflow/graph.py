@@ -11,7 +11,6 @@ from langchain_core.messages import AnyMessage, AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from typing import List, Dict, Any, TypedDict, Annotated, Tuple, Union
 from botocore.exceptions import ClientError
-from langfuse import get_client as get_langfuse_client
 import random
 from ..tools.final_answer_tools import FinalAnswerTool
 from ..prompts import (
@@ -34,16 +33,11 @@ from pathlib import Path
 from ..agents.graph import create_custom_react_agent
 from langchain_core.tools import tool
 from langgraph.types import interrupt
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 import re
 
 
 # Load .env from repo root explicitly and override to ensure keys are visible
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
-# Initialize callback; it reads LANGFUSE_* from environment
-langfuse = get_langfuse_client()  # uses env vars
-
-lf_cb = LangfuseCallbackHandler()
 
 class OverallState(TypedDict):
     """State for the overall graph."""
@@ -84,13 +78,13 @@ parser = JsonOutputParser()
 @tool
 def human_assistance(query: str) -> str:
     """
-    Use this tool when you need human assistance.
+    Use this tool when you need to ask for more information instead of ending the conversation.
     """
     # human_response = interrupt({"query": query})
     # return human_response["data"]
     return "Just assume the safe default for the archetype and requirements for software development."
 
-async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]]):
+async def spawn_engineers(base_url: str, branch_name: str, specs_list: list[list[dict]], **kwargs):
     """Spawn a container for each job and clean up the containers after the job is done.
     The container will implement the job using the claude-code.
 
@@ -308,8 +302,7 @@ async def architect(state: OverallState):
             architect_agent_to_run.ainvoke,
             payload,
             config={
-                "recursion_limit": 200,
-                "callbacks": [LangfuseCallbackHandler()]
+                "recursion_limit": 200
             },
             max_retries=7,
             base_delay=0.6,
